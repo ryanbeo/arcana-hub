@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arcana Daily</title>
+    <meta
+      name="description"
+      content="Draw one tarot card each day and explore its artwork, core symbolism, and themed reading."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="noise"></div>
+      <div class="halo halo-one"></div>
+      <div class="halo halo-two"></div>
+
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Arcana Daily</p>
+          <h1>One card. Five lenses. One clear daily reflection.</h1>
+          <p class="intro">
+            Reveal a single tarot card for today, learn what its artwork is
+            saying, and read its message across life, work, relationships,
+            money, and mindset.
+          </p>
+        </div>
+
+        <div class="daily-panel panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Today’s draw</p>
+              <h2 id="dateHeading"></h2>
+            </div>
+            <span class="status-badge" id="dailyStatus"></span>
+          </div>
+
+          <p class="panel-copy" id="helperText">
+            Your daily card stays the same until tomorrow.
+          </p>
+
+          <div class="actions-row">
+            <button class="primary-button" id="drawButton" type="button">Reveal today’s card</button>
+            <button class="ghost-button hidden" id="shareButton" type="button">Download reading card</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="reading-layout hidden" id="readingLayout">
+          <article class="card-column panel">
+            <div class="card-frame">
+              <div class="tarot-card" id="tarotCard">
+                <div class="card-face">
+                  <img id="cardArtwork" alt="" />
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="reading-column panel">
+            <div class="section-header compact">
+              <div>
+                <p class="eyebrow" id="cardArcana"></p>
+                <h2 id="cardName"></h2>
+              </div>
+              <span class="status-badge muted" id="cardOrientation"></span>
+            </div>
+
+            <p class="reading-summary" id="cardSummary"></p>
+
+            <div class="keyword-row">
+              <div class="keyword-card">
+                <p class="eyebrow">Core keyword</p>
+                <h3 id="primaryKeyword"></h3>
+                <p id="keywordSupport"></p>
+              </div>
+              <div class="keyword-card">
+                <p class="eyebrow">Artwork speaks through</p>
+                <p id="artworkDescription"></p>
+              </div>
+            </div>
+
+            <div class="theme-grid">
+              <article class="theme-block">
+                <h3>General</h3>
+                <p id="themeGeneral"></p>
+              </article>
+              <article class="theme-block">
+                <h3>Work</h3>
+                <p id="themeWork"></p>
+              </article>
+              <article class="theme-block">
+                <h3>Relationship</h3>
+                <p id="themeRelationship"></p>
+              </article>
+              <article class="theme-block">
+                <h3>Money</h3>
+                <p id="themeMoney"></p>
+              </article>
+              <article class="theme-block theme-block-wide">
+                <h3>Mind</h3>
+                <p id="themeMind"></p>
+              </article>
+            </div>
+          </article>
+        </section>
+
+        <section class="history-panel panel">
+          <div class="section-header compact">
+            <div>
+              <p class="eyebrow">Daily history</p>
+              <h2>Your recent cards</h2>
+            </div>
+          </div>
+
+          <div class="history-list" id="historyList">
+            <p class="empty-state">Reveal a card to start your reading history.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./card-data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
