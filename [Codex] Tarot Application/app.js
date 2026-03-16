@@ -1,10 +1,23 @@
 const STORAGE_KEY = "arcana-daily-reading";
 
 const dateHeading = document.getElementById("dateHeading");
-const dailyStatus = document.getElementById("dailyStatus");
-const helperText = document.getElementById("helperText");
-const drawButton = document.getElementById("drawButton");
+const deckButton = document.getElementById("deckButton");
+const deckShell = document.getElementById("deckShell");
+const parallaxLayers = document.querySelectorAll("[data-parallax-layer]");
+const heroPulledCard = document.getElementById("heroPulledCard");
+const heroCardArtwork = document.getElementById("heroCardArtwork");
+const revealPanel = document.getElementById("revealPanel");
+const revealHeadline = document.getElementById("revealHeadline");
+const revealTags = document.getElementById("revealTags");
+const continueButton = document.getElementById("continueButton");
+const readingViewport = document.getElementById("readingViewport");
+const redrawButton = document.getElementById("redrawButton");
 const shareButton = document.getElementById("shareButton");
+const historyLink = document.getElementById("historyLink");
+const refreshLink = document.getElementById("refreshLink");
+const historyDialog = document.getElementById("historyDialog");
+const closeHistoryButton = document.getElementById("closeHistoryButton");
+const historyDialogList = document.getElementById("historyDialogList");
 const readingLayout = document.getElementById("readingLayout");
 const tarotCard = document.getElementById("tarotCard");
 const cardArtwork = document.getElementById("cardArtwork");
@@ -22,6 +35,19 @@ const themeMoney = document.getElementById("themeMoney");
 const themeMind = document.getElementById("themeMind");
 const historyList = document.getElementById("historyList");
 
+function updateParallax(clientX, clientY) {
+  const normalizedX = (clientX / window.innerWidth - 0.5) * 2;
+  const normalizedY = (clientY / window.innerHeight - 0.5) * 2;
+
+  document.documentElement.style.setProperty("--parallax-x", `${normalizedX * 18}px`);
+  document.documentElement.style.setProperty("--parallax-y", `${normalizedY * 18}px`);
+}
+
+function resetParallax() {
+  document.documentElement.style.setProperty("--parallax-x", "0px");
+  document.documentElement.style.setProperty("--parallax-y", "0px");
+}
+
 function todayKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -38,23 +64,12 @@ function formatToday(date = new Date()) {
   }).format(date);
 }
 
-function hashString(value) {
-  let hash = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(index);
-    hash |= 0;
-  }
-
-  return Math.abs(hash);
-}
-
-function drawForDate(dateKey) {
+function randomDraw() {
   const deck = window.TAROT_DATABASE.cards;
-  const seed = hashString(dateKey);
+  const cardIndex = Math.floor(Math.random() * deck.length);
   return {
-    cardKey: deck[seed % deck.length].key,
-    orientation: (Math.floor(seed / deck.length) % 2) === 0 ? "upright" : "reversed"
+    cardKey: deck[cardIndex].key,
+    orientation: Math.random() < 0.5 ? "upright" : "reversed"
   };
 }
 
@@ -102,13 +117,38 @@ function createArtworkUri(card, orientation) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-function readingCopy(card, orientation, themeName) {
-  const text = card.themes[themeName];
-  if (orientation === "upright") {
-    return text.upright;
+function artworkSource(card, orientation) {
+  if (card.imageUrl) {
+    return card.imageUrl;
   }
 
-  return text.reversed;
+  return createArtworkUri(card, orientation);
+}
+
+function readingCopy(card, orientation, themeName) {
+  const text = card.themes[themeName];
+  return orientation === "upright" ? text.upright : text.reversed;
+}
+
+function attachFallback(imageNode) {
+  imageNode.addEventListener("error", () => {
+    const fallback = imageNode.dataset.fallback;
+    if (fallback && imageNode.src !== fallback) {
+      imageNode.src = fallback;
+    }
+  });
+}
+
+attachFallback(cardArtwork);
+attachFallback(heroCardArtwork);
+
+function updateRevealPanel(card) {
+  revealHeadline.textContent = card.name;
+  revealTags.innerHTML = card.keywords
+    .slice(0, 4)
+    .map((keyword) => `<span class="reveal-tag">#${keyword.replace(/\s+/g, "")}</span>`)
+    .join("");
+  revealPanel.classList.remove("hidden");
 }
 
 function renderReading(reading) {
@@ -118,10 +158,19 @@ function renderReading(reading) {
   }
 
   const orientation = reading.orientation;
+  const fallback = createArtworkUri(card, orientation);
+  const source = artworkSource(card, orientation);
+
   readingLayout.classList.remove("hidden");
+  heroCardArtwork.dataset.fallback = fallback;
+  heroCardArtwork.src = source;
+  heroCardArtwork.alt = `${card.name} tarot card artwork`;
+
   tarotCard.style.transform = orientation === "reversed" ? "rotate(180deg)" : "none";
-  cardArtwork.src = createArtworkUri(card, orientation);
+  cardArtwork.dataset.fallback = fallback;
+  cardArtwork.src = source;
   cardArtwork.alt = `${card.name} tarot card artwork`;
+
   cardArcana.textContent = card.arcanaLabel;
   cardName.textContent = card.name;
   cardOrientation.textContent = orientation === "reversed" ? "Reversed" : "Upright";
@@ -134,36 +183,39 @@ function renderReading(reading) {
   themeRelationship.textContent = readingCopy(card, orientation, "relationship");
   themeMoney.textContent = readingCopy(card, orientation, "money");
   themeMind.textContent = readingCopy(card, orientation, "mind");
+
+  updateRevealPanel(card);
+  redrawButton.classList.remove("hidden");
   shareButton.classList.remove("hidden");
 }
 
 function renderHistory(history) {
-  if (!history.length) {
-    historyList.innerHTML = '<p class="empty-state">Reveal a card to start your reading history.</p>';
-    return;
-  }
+  const markup = !history.length
+    ? '<p class="empty-state">Reveal a card to start your reading history.</p>'
+    : history
+        .slice()
+        .reverse()
+        .map((entry) => {
+          const card = lookupCard(entry.cardKey);
+          if (!card) {
+            return "";
+          }
 
-  historyList.innerHTML = history
-    .slice()
-    .reverse()
-    .map((entry) => {
-      const card = lookupCard(entry.cardKey);
-      if (!card) {
-        return "";
-      }
+          return `
+            <article class="history-card">
+              <div class="history-meta">
+                <span class="history-date">${entry.date}</span>
+                <span class="status-badge muted">${entry.orientation === "reversed" ? "Reversed" : "Upright"}</span>
+              </div>
+              <h3>${card.name}</h3>
+              <p>${entry.orientation === "reversed" ? card.summary.reversed : card.summary.upright}</p>
+            </article>
+          `;
+        })
+        .join("");
 
-      return `
-        <article class="history-card">
-          <div class="history-meta">
-            <span class="history-date">${entry.date}</span>
-            <span class="status-badge muted">${entry.orientation === "reversed" ? "Reversed" : "Upright"}</span>
-          </div>
-          <h3>${card.name}</h3>
-          <p>${entry.orientation === "reversed" ? card.summary.reversed : card.summary.upright}</p>
-        </article>
-      `;
-    })
-    .join("");
+  historyList.innerHTML = markup;
+  historyDialogList.innerHTML = markup;
 }
 
 function syncUi() {
@@ -172,43 +224,125 @@ function syncUi() {
   const todayReading = state.current && state.current.date === dateKey ? state.current : null;
 
   dateHeading.textContent = formatToday();
-  dailyStatus.textContent = todayReading ? "Card revealed" : "One card waiting";
-  helperText.textContent = todayReading
-    ? "Today’s card is locked in. Come back tomorrow for a fresh draw."
-    : "Your daily card stays the same until tomorrow.";
-  drawButton.disabled = Boolean(todayReading);
-  drawButton.textContent = todayReading ? "Come back tomorrow" : "Reveal today’s card";
+  redrawButton.classList.toggle("hidden", !todayReading);
+  shareButton.classList.toggle("hidden", !todayReading);
 
   if (todayReading) {
     renderReading(todayReading);
+    deckButton.classList.add("hidden");
   }
 
   renderHistory(state.history || []);
 }
 
+function revealAnimation(reading) {
+  const card = lookupCard(reading.cardKey);
+  if (!card) {
+    return;
+  }
+
+  const orientation = reading.orientation;
+  heroPulledCard.style.transform =
+    orientation === "reversed" ? "rotate(180deg) translateY(-26px) scale(1.02)" : "";
+  heroCardArtwork.dataset.fallback = createArtworkUri(card, orientation);
+  heroCardArtwork.src = artworkSource(card, orientation);
+  heroCardArtwork.alt = `${card.name} tarot card artwork`;
+
+  revealPanel.classList.add("hidden");
+  deckButton.classList.add("hidden");
+  deckShell.classList.add("is-drawing");
+
+  window.setTimeout(() => {
+    deckShell.classList.add("is-flipping");
+  }, 420);
+
+  window.setTimeout(() => {
+    deckShell.classList.add("is-revealed");
+    renderReading(reading);
+  }, 1280);
+}
+
 function handleDraw() {
+  if (deckShell.classList.contains("is-drawing")) {
+    return;
+  }
+
   const state = loadState();
   const dateKey = todayKey();
   const existing = state.current && state.current.date === dateKey ? state.current : null;
 
   if (existing) {
     renderReading(existing);
-    syncUi();
     return;
   }
 
-  const daily = drawForDate(dateKey);
   const reading = {
     date: dateKey,
-    cardKey: daily.cardKey,
-    orientation: daily.orientation
+    ...randomDraw()
   };
 
   state.current = reading;
   state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
   saveState(state);
-  renderReading(reading);
-  syncUi();
+  revealAnimation(reading);
+}
+
+function resetDeckState() {
+  revealPanel.classList.add("hidden");
+  deckButton.classList.remove("hidden");
+  deckShell.classList.remove("is-drawing", "is-flipping", "is-revealed");
+  heroPulledCard.style.transform = "";
+}
+
+function clearAllState() {
+  localStorage.removeItem(STORAGE_KEY);
+  readingLayout.classList.add("hidden");
+  shareButton.classList.add("hidden");
+  redrawButton.classList.add("hidden");
+  cardArtwork.removeAttribute("src");
+  heroCardArtwork.removeAttribute("src");
+  revealHeadline.textContent = "";
+  revealTags.innerHTML = "";
+  renderHistory([]);
+  resetDeckState();
+  if (historyDialog.open) {
+    historyDialog.close();
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function openHistoryDialog() {
+  historyDialog.showModal();
+}
+
+function closeHistoryDialog() {
+  historyDialog.close();
+}
+
+function handleRedraw() {
+  if (deckShell.classList.contains("is-drawing")) {
+    return;
+  }
+
+  const state = loadState();
+  const dateKey = todayKey();
+  const reading = {
+    date: dateKey,
+    ...randomDraw()
+  };
+
+  state.current = reading;
+  state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
+  saveState(state);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.setTimeout(() => {
+    resetDeckState();
+    revealAnimation(reading);
+  }, 280);
+}
+
+function continueToReading() {
+  readingViewport.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function buildShareCanvas() {
@@ -307,7 +441,24 @@ async function handleDownloadCard() {
   link.click();
 }
 
-drawButton.addEventListener("click", handleDraw);
+deckButton.addEventListener("click", handleDraw);
+deckShell.addEventListener("click", handleDraw);
+continueButton.addEventListener("click", continueToReading);
+redrawButton.addEventListener("click", handleRedraw);
 shareButton.addEventListener("click", handleDownloadCard);
+historyLink.addEventListener("click", openHistoryDialog);
+refreshLink.addEventListener("click", clearAllState);
+closeHistoryButton.addEventListener("click", closeHistoryDialog);
+
+if (window.matchMedia("(pointer: fine)").matches) {
+  window.addEventListener("mousemove", (event) => {
+    updateParallax(event.clientX, event.clientY);
+  });
+
+  document.body.addEventListener("mouseleave", resetParallax);
+  window.addEventListener("blur", resetParallax);
+} else {
+  resetParallax();
+}
 
 syncUi();
