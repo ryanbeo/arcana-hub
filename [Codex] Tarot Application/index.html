@@ -98,7 +98,7 @@
                 <span class="status-badge muted" id="cardOrientation"></span>
               </div>
 
-              <p class="reading-summary" id="cardSummary"></p>
+              <p class="reading-summary text-reveal" id="cardSummary"></p>
 
               <div class="keyword-row">
                 <div class="keyword-card">
@@ -122,43 +122,42 @@
                 </div>
               </div>
 
-              <div class="theme-grid">
-                <article class="theme-block">
+              <section class="theme-tabs-panel">
+                <div class="theme-tabs" role="tablist" aria-label="Reading themes">
+                  <button class="theme-tab is-active" id="tab-general" type="button" role="tab" aria-selected="true" aria-controls="themePanel" data-theme="general">
+                    <span class="theme-tab-icon">☼</span>
+                    <span>General</span>
+                  </button>
+                  <button class="theme-tab" id="tab-work" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="work">
+                    <span class="theme-tab-icon">✷</span>
+                    <span>Work</span>
+                  </button>
+                  <button class="theme-tab" id="tab-relationship" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="relationship">
+                    <span class="theme-tab-icon">♡</span>
+                    <span>Relationship</span>
+                  </button>
+                  <button class="theme-tab" id="tab-money" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="money">
+                    <span class="theme-tab-icon">◈</span>
+                    <span>Money</span>
+                  </button>
+                  <button class="theme-tab" id="tab-mind" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="mind">
+                    <span class="theme-tab-icon">☾</span>
+                    <span>Mind</span>
+                  </button>
+                </div>
+
+                <article class="theme-block theme-reading" id="themePanel" role="tabpanel" aria-labelledby="tab-general">
                   <div class="block-heading">
-                    <span class="icon-badge">☼</span>
-                    <h3>General</h3>
+                    <span class="icon-badge" id="activeThemeIcon">☼</span>
+                    <div>
+                      <p class="eyebrow">Detailed reading</p>
+                      <h3 id="activeThemeTitle">General</h3>
+                    </div>
                   </div>
-                  <p id="themeGeneral"></p>
+                  <p class="theme-intro" id="themeIntro"></p>
+                  <p class="theme-reading-copy" id="themeReading"></p>
                 </article>
-                <article class="theme-block">
-                  <div class="block-heading">
-                    <span class="icon-badge">✷</span>
-                    <h3>Work</h3>
-                  </div>
-                  <p id="themeWork"></p>
-                </article>
-                <article class="theme-block">
-                  <div class="block-heading">
-                    <span class="icon-badge">♡</span>
-                    <h3>Relationship</h3>
-                  </div>
-                  <p id="themeRelationship"></p>
-                </article>
-                <article class="theme-block">
-                  <div class="block-heading">
-                    <span class="icon-badge">◈</span>
-                    <h3>Money</h3>
-                  </div>
-                  <p id="themeMoney"></p>
-                </article>
-                <article class="theme-block theme-block-wide">
-                  <div class="block-heading">
-                    <span class="icon-badge">☾</span>
-                    <h3>Mind</h3>
-                  </div>
-                  <p id="themeMind"></p>
-                </article>
-              </div>
+              </section>
             </article>
           </section>
 
@@ -188,6 +187,25 @@
           </div>
           <div class="history-list history-list-dialog" id="historyDialogList">
             <p class="empty-state">Reveal a card to start your reading history.</p>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog class="history-dialog export-dialog" id="exportDialog">
+        <div class="history-dialog-card export-dialog-card">
+          <div class="history-dialog-header">
+            <div>
+              <p class="eyebrow">Preview</p>
+              <h2>Your reading card</h2>
+            </div>
+            <button class="dialog-close" id="closeExportButton" type="button" aria-label="Close">×</button>
+          </div>
+          <div class="export-preview-shell">
+            <img id="exportPreviewImage" alt="Preview of the reading card download" />
+          </div>
+          <div class="export-actions">
+            <button class="ghost-button secondary-button" id="cancelExportButton" type="button">Cancel</button>
+            <button class="ghost-button" id="confirmDownloadButton" type="button">Download image</button>
           </div>
         </div>
       </dialog>
