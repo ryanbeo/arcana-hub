@@ -1,6 +1,9 @@
 const STORAGE_KEY = "arcana-daily-reading";
+const LANGUAGE_STORAGE_KEY = "arcana-daily-language";
 
 const dateHeading = document.getElementById("dateHeading");
+const langEnglish = document.getElementById("langEnglish");
+const langVietnamese = document.getElementById("langVietnamese");
 const deckButton = document.getElementById("deckButton");
 const deckShell = document.getElementById("deckShell");
 const parallaxLayers = document.querySelectorAll("[data-parallax-layer]");
@@ -39,32 +42,56 @@ const activeThemeTitle = document.getElementById("activeThemeTitle");
 const themeIntro = document.getElementById("themeIntro");
 const themeReading = document.getElementById("themeReading");
 const historyList = document.getElementById("historyList");
+const dailyRevealEyebrow = document.getElementById("dailyRevealEyebrow");
+const revealKicker = document.getElementById("revealKicker");
+const readingEyebrow = document.getElementById("readingEyebrow");
+const coreKeywordEyebrow = document.getElementById("coreKeywordEyebrow");
+const artworkEyebrow = document.getElementById("artworkEyebrow");
+const detailedReadingEyebrow = document.getElementById("detailedReadingEyebrow");
+const historyEyebrow = document.getElementById("historyEyebrow");
+const historyHeading = document.getElementById("historyHeading");
+const historyEmptyState = document.getElementById("historyEmptyState");
+const archiveEyebrow = document.getElementById("archiveEyebrow");
+const historyDialogHeading = document.getElementById("historyDialogHeading");
+const historyDialogEmptyState = document.getElementById("historyDialogEmptyState");
+const previewEyebrow = document.getElementById("previewEyebrow");
+const exportHeading = document.getElementById("exportHeading");
 
 const THEME_META = {
   general: {
     label: "General",
+    labelVi: "Tổng quan",
     icon: "☼",
-    intro: "The tone of the day"
+    intro: "The tone of the day",
+    introVi: "Năng lượng chung của ngày hôm nay"
   },
   work: {
     label: "Work",
+    labelVi: "Công việc",
     icon: "✷",
-    intro: "How this energy wants to move through your work"
+    intro: "How this energy wants to move through your work",
+    introVi: "Năng lượng này đang đi vào công việc của bạn như thế nào"
   },
   relationship: {
     label: "Relationship",
+    labelVi: "Tình cảm",
     icon: "♡",
-    intro: "What this card is saying about connection"
+    intro: "What this card is saying about connection",
+    introVi: "Lá bài này đang nói gì về sự kết nối"
   },
   money: {
     label: "Money",
+    labelVi: "Tài chính",
     icon: "◈",
-    intro: "How to handle resources and practical choices"
+    intro: "How to handle resources and practical choices",
+    introVi: "Cách xử lý tiền bạc và những lựa chọn thực tế"
   },
   mind: {
     label: "Mind",
+    labelVi: "Tâm trí",
     icon: "☾",
-    intro: "The inner message beneath the surface"
+    intro: "The inner message beneath the surface",
+    introVi: "Thông điệp bên trong đang muốn được nhìn thấy"
   }
 };
 
@@ -93,9 +120,82 @@ const NARRATIVE_GUIDANCE = {
 
 let activeTheme = "general";
 let currentReading = null;
+let currentLanguage = loadLanguage();
 const revealTextJobs = new WeakMap();
 let exportBlobUrl = "";
 let exportFileName = "arcana-daily-reading.png";
+const UI_COPY = window.APP_LOCALIZATION || { en: {}, vi: {} };
+
+function t(key) {
+  return UI_COPY[currentLanguage][key] || UI_COPY.en[key] || key;
+}
+
+function themeLabel(themeName) {
+  return t(`theme${themeName.charAt(0).toUpperCase()}${themeName.slice(1)}`);
+}
+
+function themeIntroLabel(themeName) {
+  return t(`theme${themeName.charAt(0).toUpperCase()}${themeName.slice(1)}Intro`);
+}
+
+function cardLocaleEntry(card) {
+  return (
+    window.TAROT_IMPORTED_CARD_CONTENT?.[currentLanguage]?.cards?.[card.key] ||
+    window.TAROT_CARD_LOCALIZATION?.[currentLanguage]?.cards?.[card.key] ||
+    null
+  );
+}
+
+function localizedCardValue(card, key) {
+  const localeEntry = cardLocaleEntry(card);
+  return localeEntry && localeEntry[key] !== undefined ? localeEntry[key] : card[key];
+}
+
+function localizedCardName(card) {
+  return localizedCardValue(card, "name");
+}
+
+function localizedArcanaLabel(card) {
+  return localizedCardValue(card, "arcanaLabel");
+}
+
+function localizedPrimaryKeyword(card) {
+  return localizedCardValue(card, "primaryKeyword");
+}
+
+function localizedKeywords(card) {
+  return localizedCardValue(card, "keywords");
+}
+
+function localizedArtwork(card) {
+  return localizedCardValue(card, "artwork");
+}
+
+function localizedSummary(card, orientation) {
+  const localized = cardLocaleEntry(card)?.summary?.[orientation];
+  return localized || card.summary[orientation];
+}
+
+function localizedThemeCopy(card, orientation, themeName) {
+  const localized = cardLocaleEntry(card)?.themes?.[themeName]?.[orientation];
+  return localized || card.themes[themeName][orientation];
+}
+
+function applyLocalizedElements() {
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    const key = node.dataset.i18n;
+    node.textContent = t(key);
+  });
+}
+
+function loadLanguage() {
+  const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  if (stored === "en" || stored === "vi") {
+    return stored;
+  }
+
+  return navigator.language && navigator.language.toLowerCase().startsWith("vi") ? "vi" : "en";
+}
 
 function updateParallax(clientX, clientY) {
   const normalizedX = (clientX / window.innerWidth - 0.5) * 2;
@@ -118,7 +218,7 @@ function todayKey(date = new Date()) {
 }
 
 function formatToday(date = new Date()) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(currentLanguage === "vi" ? "vi-VN" : undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -188,8 +288,7 @@ function artworkSource(card, orientation) {
 }
 
 function readingCopy(card, orientation, themeName) {
-  const text = card.themes[themeName];
-  return orientation === "upright" ? text.upright : text.reversed;
+  return localizedThemeCopy(card, orientation, themeName);
 }
 
 function joinKeywords(keywords) {
@@ -204,43 +303,86 @@ function joinKeywords(keywords) {
   return `${keywords.slice(0, -1).join(", ")}, and ${keywords[keywords.length - 1]}`;
 }
 
+function sentenceCase(text) {
+  if (!text) {
+    return "";
+  }
+
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
 function buildSummaryNarrative(card, orientation) {
+  const summary = localizedSummary(card, orientation);
+  const keyword = localizedPrimaryKeyword(card).toLowerCase();
+  const cardTitle = localizedCardName(card);
+  const keywordTrail = joinKeywords(localizedKeywords(card).slice(0, 3)).toLowerCase();
+
+  if (currentLanguage === "vi") {
+    const tone =
+      orientation === "reversed"
+      ? `Lá bài ${cardTitle} xuất hiện ở chiều ngược, nên năng lượng hôm nay mang màu sắc hướng nội hơn và đòi hỏi bạn phải đi chậm để nhìn rõ điều gì đang lệch khỏi quỹ đạo.`
+      : `Lá bài ${cardTitle} xuất hiện ở chiều thuận, mang theo một dòng năng lượng khá rõ ràng, như thể ngày hôm nay đang mời bạn bước vào bài học này bằng sự chủ động và tỉnh táo.`;
+    return `${tone} Chủ đề cốt lõi của bạn hôm nay xoay quanh ${keyword}. ${summary} Nếu lắng nghe kỹ hơn, bạn sẽ thấy lá bài còn nhắc đến ${keywordTrail} qua chính hình ảnh của nó. Điều cần làm không phải là vội kết luận, mà là ở lại với thông điệp này đủ lâu để nó thấm vào cách bạn lựa chọn, phản ứng, và giữ nhịp cho cả ngày.`;
+  }
+
   const opening =
     orientation === "reversed"
-      ? `Today's card arrives in a reversed posture, so its message feels more inward, tender, and a little more cautionary.`
-      : `Today's card arrives upright, and it brings a direct, open current for you to work with.`;
-  const summary = orientation === "reversed" ? card.summary.reversed : card.summary.upright;
+      ? `Today's card, ${cardTitle}, arrives reversed, so I would read its message as more inward, more delicate, and a little more cautionary than usual.`
+      : `Today's card, ${cardTitle}, arrives upright, and it carries a clear current you can work with consciously throughout the day.`;
 
-  return `${opening} The heart of today's reading is ${card.primaryKeyword.toLowerCase()}. ${summary} Let this be the atmosphere you return to whenever the day starts pulling you in too many directions.`;
+  return `${opening} The central theme moving through your day is ${keyword}. ${summary} The imagery of the card also points toward ${keywordTrail}, which tells me this lesson is not only intellectual, but something you may feel through atmosphere, instinct, and timing. Let this be the message you return to whenever the day begins to scatter your attention.`;
 }
 
 function buildArtworkNarrative(card) {
-  return `The artwork shows ${card.artwork.charAt(0).toLowerCase()}${card.artwork.slice(1)} In tarot, that imagery points toward ${joinKeywords(card.keywords.slice(0, 3)).toLowerCase()}, so even before you read the finer details, the card is already asking you to notice that pattern in your own day.`;
+  const artwork = localizedArtwork(card);
+  const keywords = localizedKeywords(card);
+  if (currentLanguage === "vi") {
+    return `Hình ảnh trên lá bài cho thấy ${artwork.charAt(0).toLowerCase()}${artwork.slice(1)} Biểu tượng này nhắc bạn chú ý đến ${joinKeywords(keywords.slice(0, 3)).toLowerCase()}, vì đó là manh mối quan trọng của ngày hôm nay.`;
+  }
+
+  return `The artwork shows ${artwork.charAt(0).toLowerCase()}${artwork.slice(1)} In tarot, that imagery points toward ${joinKeywords(keywords.slice(0, 3)).toLowerCase()}, so even before you read the finer details, the card is already asking you to notice that pattern in your own day.`;
 }
 
 function buildThemeNarrative(card, orientation, themeName) {
   const theme = THEME_META[themeName];
   const guidance = NARRATIVE_GUIDANCE[themeName];
   const themeCopy = readingCopy(card, orientation, themeName);
-  const summary = orientation === "reversed" ? card.summary.reversed : card.summary.upright;
+  const keyword = localizedPrimaryKeyword(card).toLowerCase();
+  const cardTitle = localizedCardName(card);
+  if (currentLanguage === "vi") {
+    const closingMap = {
+      general: "Hãy để thông điệp này làm nhịp nền cho cả ngày, thay vì chỉ xem nó như một ý niệm thoáng qua.",
+      work: "Bạn không cần xử lý mọi thứ cùng lúc, nhưng bạn cần giữ sự tỉnh táo đủ lâu để chọn đúng bước tiếp theo.",
+      relationship: "Điều quan trọng ở đây không phải phản ứng nhanh, mà là phản ứng đúng với sự thật đang hiện ra.",
+      money: "Nếu giữ được sự bình tĩnh, bạn sẽ thấy lựa chọn đúng thường đến từ sự rõ ràng chứ không đến từ áp lực.",
+      mind: "Hãy xem đây như lời mời trở về với nhịp thở, sự quan sát, và điều bạn thực sự biết là đúng."
+    };
+    return `${themeCopy} ${closingMap[themeName]}`;
+  }
+
+  const summary = localizedSummary(card, orientation);
   const orientationNote =
     orientation === "reversed"
       ? `Because the card is reversed, I would read this as an energy that needs extra awareness and gentleness.`
       : `Because the card is upright, I would read this as an energy you can actively lean into today.`;
 
-  return `The ${theme.label.toLowerCase()} theme for today is ${card.primaryKeyword.toLowerCase()}. ${themeCopy} ${orientationNote} This card indicates ${summary.charAt(0).toLowerCase()}${summary.slice(1)} You should ${guidance.should}. You should not ${guidance.shouldNot}.`;
+  return `In the ${theme.label.toLowerCase()} area, ${cardTitle} places ${keyword} right at the center of the conversation. ${themeCopy} ${orientationNote} To me, this suggests that ${sentenceCase(summary)} You should ${guidance.should}. You should not ${guidance.shouldNot}. If you stay close to this message, the theme becomes much easier to navigate with grace instead of reaction.`;
 }
 
 function buildThemeSummary(card, orientation, themeName) {
-  const theme = THEME_META[themeName];
   const baseCopy = readingCopy(card, orientation, themeName);
-  const keyword = card.primaryKeyword.toLowerCase();
+  if (currentLanguage === "vi") {
+    return baseCopy;
+  }
+
+  const keyword = localizedPrimaryKeyword(card).toLowerCase();
+  const cardName = localizedCardName(card);
   const intros = {
     general: `This card brings ${keyword} into focus today.`,
-    work: `In work, ${card.name} highlights ${keyword}.`,
-    relationship: `In relationships, ${card.name} points to ${keyword}.`,
-    money: `For money matters, ${card.name} favors ${keyword}.`,
-    mind: `Mentally, ${card.name} asks for ${keyword}.`
+    work: `In work, ${cardName} highlights ${keyword}.`,
+    relationship: `In relationships, ${cardName} points to ${keyword}.`,
+    money: `For money matters, ${cardName} favors ${keyword}.`,
+    mind: `Mentally, ${cardName} asks for ${keyword}.`
   };
 
   return `${intros[themeName]} ${baseCopy}`;
@@ -261,18 +403,24 @@ function trimSentence(text, maxLength) {
 }
 
 function buildExportCopy(card, orientation) {
-  const orientationLabel = orientation === "reversed" ? "Reversed" : "Upright";
-  const intro = trimSentence(
-    `${card.name} brings ${card.primaryKeyword.toLowerCase()} into focus through ${card.keywords[0].toLowerCase()} and ${card.keywords[1].toLowerCase()}.`,
-    110
-  );
-  const artwork = trimSentence(card.artwork, 160);
+  const orientationLabel = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
+  const cardName = localizedCardName(card);
+  const primaryKeyword = localizedPrimaryKeyword(card);
+  const keywords = localizedKeywords(card);
+  const intro =
+    currentLanguage === "vi"
+      ? trimSentence(`${cardName} đưa ${primaryKeyword.toLowerCase()} vào trọng tâm thông qua ${keywords[0].toLowerCase()} và ${keywords[1].toLowerCase()}.`, 120)
+      : trimSentence(
+          `${cardName} brings ${primaryKeyword.toLowerCase()} into focus through ${keywords[0].toLowerCase()} and ${keywords[1].toLowerCase()}.`,
+          110
+        );
+  const artwork = trimSentence(localizedArtwork(card), 160);
 
   return {
     orientationLabel,
     intro,
-    keywordLabel: card.primaryKeyword,
-    keywordSupport: trimSentence(`Supporting keywords: ${card.keywords.join(", ")}.`, 120),
+    keywordLabel: primaryKeyword,
+    keywordSupport: trimSentence(`${t("supportKeywords")}: ${keywords.join(", ")}.`, 120),
     artwork: trimSentence(artwork, 150),
     general: trimSentence(buildThemeSummary(card, orientation, "general"), 145),
     work: trimSentence(buildThemeSummary(card, orientation, "work"), 145),
@@ -280,6 +428,13 @@ function buildExportCopy(card, orientation) {
     money: trimSentence(buildThemeSummary(card, orientation, "money"), 145),
     mind: trimSentence(buildThemeSummary(card, orientation, "mind"), 170)
   };
+}
+
+function downloadSlug(card) {
+  const localizedName = localizedCardName(card) || card.name || "reading";
+  const normalized = localizedName.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const safe = normalized.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return safe || card.key || "reading";
 }
 
 function revealText(node, text, speed = 14) {
@@ -321,8 +476,8 @@ function setThemeTab(themeName) {
 
   document.getElementById("themePanel").setAttribute("aria-labelledby", `tab-${themeName}`);
   activeThemeIcon.textContent = theme.icon;
-  activeThemeTitle.textContent = theme.label;
-  themeIntro.textContent = theme.intro;
+  activeThemeTitle.textContent = themeLabel(themeName);
+  themeIntro.textContent = themeIntroLabel(themeName);
 
   if (currentReading) {
     const card = lookupCard(currentReading.cardKey);
@@ -332,6 +487,40 @@ function setThemeTab(themeName) {
   } else {
     themeReading.textContent = "";
   }
+}
+
+function renderLanguage() {
+  document.documentElement.lang = currentLanguage === "vi" ? "vi" : "en";
+  applyLocalizedElements();
+  langEnglish.classList.toggle("is-active", currentLanguage === "en");
+  langVietnamese.classList.toggle("is-active", currentLanguage === "vi");
+  historyLink.setAttribute("aria-label", t("cardHistoryAria"));
+  refreshLink.setAttribute("aria-label", t("refreshAria"));
+  closeHistoryButton.setAttribute("aria-label", t("closeAria"));
+  closeExportButton.setAttribute("aria-label", t("closeAria"));
+
+  themeTabs.forEach((tab) => {
+    tab.lastElementChild.textContent = themeLabel(tab.dataset.theme);
+  });
+
+  if (!loadState().history?.length) {
+    historyEmptyState.textContent = t("historyEmpty");
+    historyDialogEmptyState.textContent = t("historyEmpty");
+  }
+
+  dateHeading.textContent = formatToday();
+
+  if (currentReading) {
+    renderReading(currentReading);
+  } else {
+    setThemeTab(activeTheme);
+  }
+}
+
+function setLanguage(language) {
+  currentLanguage = language;
+  localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  renderLanguage();
 }
 
 function attachFallback(imageNode) {
@@ -347,8 +536,8 @@ attachFallback(cardArtwork);
 attachFallback(heroCardArtwork);
 
 function updateRevealPanel(card) {
-  revealHeadline.textContent = card.name;
-  revealTags.innerHTML = card.keywords
+  revealHeadline.textContent = localizedCardName(card);
+  revealTags.innerHTML = localizedKeywords(card)
     .slice(0, 4)
     .map((keyword) => `<span class="reveal-tag">#${keyword.replace(/\s+/g, "")}</span>`)
     .join("");
@@ -376,12 +565,12 @@ function renderReading(reading) {
   cardArtwork.src = source;
   cardArtwork.alt = `${card.name} tarot card artwork`;
 
-  cardArcana.textContent = card.arcanaLabel;
-  cardName.textContent = card.name;
-  cardOrientation.textContent = orientation === "reversed" ? "Reversed" : "Upright";
+  cardArcana.textContent = localizedArcanaLabel(card);
+  cardName.textContent = localizedCardName(card);
+  cardOrientation.textContent = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
   cardSummary.textContent = "";
-  primaryKeyword.textContent = card.primaryKeyword;
-  keywordSupport.textContent = `Supporting keywords: ${card.keywords.join(", ")}`;
+  primaryKeyword.textContent = localizedPrimaryKeyword(card);
+  keywordSupport.textContent = `${t("supportKeywords")}: ${localizedKeywords(card).join(", ")}`;
   artworkDescription.textContent = "";
 
   updateRevealPanel(card);
@@ -395,7 +584,7 @@ function renderReading(reading) {
 
 function renderHistory(history) {
   const markup = !history.length
-    ? '<p class="empty-state">Reveal a card to start your reading history.</p>'
+    ? `<p class="empty-state">${t("historyEmpty")}</p>`
     : history
         .slice()
         .reverse()
@@ -409,10 +598,10 @@ function renderHistory(history) {
             <article class="history-card">
               <div class="history-meta">
                 <span class="history-date">${entry.date}</span>
-                <span class="status-badge muted">${entry.orientation === "reversed" ? "Reversed" : "Upright"}</span>
+                <span class="status-badge muted">${entry.orientation === "reversed" ? t("orientationReversed") : t("orientationUpright")}</span>
               </div>
-              <h3>${card.name}</h3>
-              <p>${entry.orientation === "reversed" ? card.summary.reversed : card.summary.upright}</p>
+              <h3>${localizedCardName(card)}</h3>
+              <p>${localizedSummary(card, entry.orientation)}</p>
             </article>
           `;
         })
@@ -605,6 +794,8 @@ async function buildShareCanvas(reading) {
   canvas.width = 1242;
   canvas.height = 1660;
   const context = canvas.getContext("2d");
+  const localizedName = localizedCardName(card);
+  const localizedArcana = localizedArcanaLabel(card);
   const exportCopy = buildExportCopy(card, orientation);
 
   if (document.fonts && document.fonts.ready) {
@@ -626,7 +817,7 @@ async function buildShareCanvas(reading) {
 
   context.fillStyle = "#ffcf78";
   context.font = "700 26px Manrope";
-  context.fillText(card.arcanaLabel.toUpperCase(), 46, 58);
+  context.fillText(localizedArcana.toUpperCase(), 46, 58);
 
   context.fillStyle = "rgba(39, 31, 58, 0.88)";
   drawRoundedRect(context, 1080, 26, 132, 60, 30);
@@ -638,9 +829,9 @@ async function buildShareCanvas(reading) {
   context.textAlign = "left";
 
   context.fillStyle = "#f8eedb";
-  const titleSize = card.name.length > 18 ? 68 : 76;
+  const titleSize = localizedName.length > 18 ? 68 : 76;
   context.font = `600 ${titleSize}px Cormorant Garamond`;
-  wrapText(context, card.name, 46, 136, 980, 72, `600 ${titleSize}px Cormorant Garamond`, "#f8eedb");
+  wrapText(context, localizedName, 46, 136, 980, 72, `600 ${titleSize}px Cormorant Garamond`, "#f8eedb");
 
   context.font = "500 34px Manrope";
   wrapText(context, exportCopy.intro, 46, 244, 1120, 54, "500 34px Manrope", "#f2e7d1");
@@ -678,13 +869,13 @@ async function buildShareCanvas(reading) {
     wrapText(context, body, x + 24, bodyY, width - 48, 42, bodyFont, "#dcc89d");
   }
 
-  drawInfoCard(46, 322, 570, 240, "✦", "Core keyword", exportCopy.keywordLabel, exportCopy.keywordSupport);
-  drawInfoCard(632, 322, 564, 240, "◌", "Artwork speaks through", "", exportCopy.artwork);
-  drawInfoCard(46, 590, 570, 308, "☼", "General", "General", exportCopy.general, "500 25px Manrope");
-  drawInfoCard(632, 590, 564, 308, "✷", "Work", "Work", exportCopy.work, "500 25px Manrope");
-  drawInfoCard(46, 926, 570, 308, "♡", "Relationship", "Relationship", exportCopy.relationship, "500 25px Manrope");
-  drawInfoCard(632, 926, 564, 308, "◈", "Money", "Money", exportCopy.money, "500 25px Manrope");
-  drawInfoCard(46, 1262, 1150, 280, "☾", "Mind", "Mind", exportCopy.mind, "500 25px Manrope");
+  drawInfoCard(46, 322, 570, 240, "✦", t("coreKeyword"), exportCopy.keywordLabel, exportCopy.keywordSupport);
+  drawInfoCard(632, 322, 564, 240, "◌", t("artworkEyebrow"), "", exportCopy.artwork);
+  drawInfoCard(46, 590, 570, 308, "☼", themeLabel("general"), themeLabel("general"), exportCopy.general, "500 25px Manrope");
+  drawInfoCard(632, 590, 564, 308, "✷", themeLabel("work"), themeLabel("work"), exportCopy.work, "500 25px Manrope");
+  drawInfoCard(46, 926, 570, 308, "♡", themeLabel("relationship"), themeLabel("relationship"), exportCopy.relationship, "500 25px Manrope");
+  drawInfoCard(632, 926, 564, 308, "◈", themeLabel("money"), themeLabel("money"), exportCopy.money, "500 25px Manrope");
+  drawInfoCard(46, 1262, 1150, 280, "☾", themeLabel("mind"), themeLabel("mind"), exportCopy.mind, "500 25px Manrope");
 
   context.fillStyle = "rgba(255, 255, 255, 0.06)";
   context.fillRect(46, 1578, 1150, 1);
@@ -694,7 +885,7 @@ async function buildShareCanvas(reading) {
   context.fillStyle = "rgba(235, 224, 202, 0.46)";
   context.font = "600 18px Manrope";
   context.textAlign = "right";
-  context.fillText("arcana daily • drawn with intention", 1196, 1624);
+  context.fillText(currentLanguage === "vi" ? "arcana daily • lá bài được rút có chủ ý" : "arcana daily • drawn with intention", 1196, 1624);
   context.textAlign = "left";
 
   return canvas;
@@ -757,7 +948,7 @@ async function handleDownloadCard() {
     }
 
     const card = reading ? lookupCard(reading.cardKey) : null;
-    const safeName = card ? card.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "reading";
+    const safeName = card ? downloadSlug(card) : "reading";
     const blob = await canvasToBlob(canvas);
     revokeExportPreview();
     exportBlobUrl = URL.createObjectURL(blob);
@@ -794,6 +985,8 @@ themeTabs.forEach((tab) => {
   });
 });
 
+langEnglish.addEventListener("click", () => setLanguage("en"));
+langVietnamese.addEventListener("click", () => setLanguage("vi"));
 deckButton.addEventListener("click", handleDraw);
 deckShell.addEventListener("click", handleDraw);
 continueButton.addEventListener("click", continueToReading);
@@ -821,4 +1014,5 @@ if (window.matchMedia("(pointer: fine)").matches) {
   resetParallax();
 }
 
+renderLanguage();
 syncUi();

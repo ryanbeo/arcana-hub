@@ -20,11 +20,15 @@
     <div class="app-shell">
       <div class="brand-mark">
         <span class="brand-icon">✦</span>
-        <span class="brand-name">Arcana Daily</span>
+        <span class="brand-name" id="brandName" data-i18n="brandName">Arcana Daily</span>
       </div>
       <div class="utility-links">
-        <button class="utility-link" id="historyLink" type="button">Card history</button>
-        <button class="utility-link" id="refreshLink" type="button">Refresh</button>
+        <div class="language-switcher" aria-label="Language switcher">
+          <button class="utility-link language-link is-active" id="langEnglish" data-i18n="languageEnglish" type="button">EN</button>
+          <button class="utility-link language-link" id="langVietnamese" data-i18n="languageVietnamese" type="button">VI</button>
+        </div>
+        <button class="utility-link" id="historyLink" data-i18n="historyLink" type="button">Card history</button>
+        <button class="utility-link" id="refreshLink" data-i18n="refreshLink" type="button">Refresh</button>
       </div>
       <div class="noise"></div>
       <div class="halo halo-one"></div>
@@ -47,18 +51,18 @@
             <span class="deck-glow"></span>
           </button>
 
-          <button class="draw-cta" id="deckButton" type="button">Draw your card</button>
+          <button class="draw-cta" id="deckButton" data-i18n="drawButton" type="button">Draw your card</button>
 
           <div class="reveal-panel hidden" id="revealPanel">
-            <p class="eyebrow">Daily reveal</p>
-            <p class="reveal-kicker">Your card today is</p>
+            <p class="eyebrow" id="dailyRevealEyebrow" data-i18n="dailyReveal">Daily reveal</p>
+            <p class="reveal-kicker" id="revealKicker" data-i18n="revealKicker">Your card today is</p>
             <h1 id="revealHeadline"></h1>
             <div class="reveal-tags" id="revealTags"></div>
             <div class="reveal-actions">
-              <button class="ghost-button reveal-button" id="continueButton" type="button">
+              <button class="ghost-button reveal-button" id="continueButton" data-i18n="continueButton" type="button">
                 Read my reading
               </button>
-              <button class="ghost-button reveal-button secondary-button hidden" id="redrawButton" type="button">
+              <button class="ghost-button reveal-button secondary-button hidden" id="redrawButton" data-i18n="redrawButton" type="button">
                 Redraw card
               </button>
             </div>
@@ -69,11 +73,11 @@
       <section class="reading-viewport" id="readingViewport">
         <header class="reading-topbar">
           <div>
-            <p class="eyebrow">Arcana Daily</p>
+            <p class="eyebrow" id="readingEyebrow" data-i18n="readingEyebrow">Arcana Daily</p>
             <h1 id="dateHeading"></h1>
           </div>
           <div class="reading-actions">
-            <button class="ghost-button hidden" id="shareButton" type="button">Download reading card</button>
+            <button class="ghost-button hidden" id="shareButton" data-i18n="shareButton" type="button">Download reading card</button>
           </div>
         </header>
 
@@ -105,7 +109,7 @@
                   <div class="block-heading">
                     <span class="icon-badge">✦</span>
                     <div>
-                      <p class="eyebrow">Core keyword</p>
+                      <p class="eyebrow" id="coreKeywordEyebrow" data-i18n="coreKeyword">Core keyword</p>
                       <h3 id="primaryKeyword"></h3>
                     </div>
                   </div>
@@ -115,7 +119,7 @@
                   <div class="block-heading">
                     <span class="icon-badge">◌</span>
                     <div>
-                      <p class="eyebrow">Artwork speaks through</p>
+                      <p class="eyebrow" id="artworkEyebrow" data-i18n="artworkEyebrow">Artwork speaks through</p>
                     </div>
                   </div>
                   <p id="artworkDescription"></p>
@@ -126,23 +130,23 @@
                 <div class="theme-tabs" role="tablist" aria-label="Reading themes">
                   <button class="theme-tab is-active" id="tab-general" type="button" role="tab" aria-selected="true" aria-controls="themePanel" data-theme="general">
                     <span class="theme-tab-icon">☼</span>
-                    <span>General</span>
+                    <span id="tabLabelGeneral" data-i18n="themeGeneral">General</span>
                   </button>
                   <button class="theme-tab" id="tab-work" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="work">
                     <span class="theme-tab-icon">✷</span>
-                    <span>Work</span>
+                    <span id="tabLabelWork" data-i18n="themeWork">Work</span>
                   </button>
                   <button class="theme-tab" id="tab-relationship" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="relationship">
                     <span class="theme-tab-icon">♡</span>
-                    <span>Relationship</span>
+                    <span id="tabLabelRelationship" data-i18n="themeRelationship">Relationship</span>
                   </button>
                   <button class="theme-tab" id="tab-money" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="money">
                     <span class="theme-tab-icon">◈</span>
-                    <span>Money</span>
+                    <span id="tabLabelMoney" data-i18n="themeMoney">Money</span>
                   </button>
                   <button class="theme-tab" id="tab-mind" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="mind">
                     <span class="theme-tab-icon">☾</span>
-                    <span>Mind</span>
+                    <span id="tabLabelMind" data-i18n="themeMind">Mind</span>
                   </button>
                 </div>
 
@@ -150,7 +154,7 @@
                   <div class="block-heading">
                     <span class="icon-badge" id="activeThemeIcon">☼</span>
                     <div>
-                      <p class="eyebrow">Detailed reading</p>
+                      <p class="eyebrow" id="detailedReadingEyebrow" data-i18n="detailedReading">Detailed reading</p>
                       <h3 id="activeThemeTitle">General</h3>
                     </div>
                   </div>
@@ -164,13 +168,13 @@
           <section class="history-panel panel">
             <div class="section-header compact">
               <div>
-                <p class="eyebrow">Daily history</p>
-                <h2>Your recent cards</h2>
+                <p class="eyebrow" id="historyEyebrow" data-i18n="historyEyebrow">Daily history</p>
+                <h2 id="historyHeading" data-i18n="historyHeading">Your recent cards</h2>
               </div>
             </div>
 
             <div class="history-list" id="historyList">
-              <p class="empty-state">Reveal a card to start your reading history.</p>
+              <p class="empty-state" id="historyEmptyState" data-i18n="historyEmpty">Reveal a card to start your reading history.</p>
             </div>
           </section>
         </main>
@@ -180,13 +184,13 @@
         <div class="history-dialog-card">
           <div class="history-dialog-header">
             <div>
-              <p class="eyebrow">Archive</p>
-              <h2>Your card history</h2>
+              <p class="eyebrow" id="archiveEyebrow" data-i18n="archiveEyebrow">Archive</p>
+              <h2 id="historyDialogHeading" data-i18n="historyDialogHeading">Your card history</h2>
             </div>
             <button class="dialog-close" id="closeHistoryButton" type="button" aria-label="Close">×</button>
           </div>
           <div class="history-list history-list-dialog" id="historyDialogList">
-            <p class="empty-state">Reveal a card to start your reading history.</p>
+            <p class="empty-state" id="historyDialogEmptyState" data-i18n="historyEmpty">Reveal a card to start your reading history.</p>
           </div>
         </div>
       </dialog>
@@ -195,8 +199,8 @@
         <div class="history-dialog-card export-dialog-card">
           <div class="history-dialog-header">
             <div>
-              <p class="eyebrow">Preview</p>
-              <h2>Your reading card</h2>
+              <p class="eyebrow" id="previewEyebrow" data-i18n="previewEyebrow">Preview</p>
+              <h2 id="exportHeading" data-i18n="exportHeading">Your reading card</h2>
             </div>
             <button class="dialog-close" id="closeExportButton" type="button" aria-label="Close">×</button>
           </div>
@@ -204,14 +208,17 @@
             <img id="exportPreviewImage" alt="Preview of the reading card download" />
           </div>
           <div class="export-actions">
-            <button class="ghost-button secondary-button" id="cancelExportButton" type="button">Cancel</button>
-            <button class="ghost-button" id="confirmDownloadButton" type="button">Download image</button>
+            <button class="ghost-button secondary-button" id="cancelExportButton" data-i18n="cancel" type="button">Cancel</button>
+            <button class="ghost-button" id="confirmDownloadButton" data-i18n="downloadImage" type="button">Download image</button>
           </div>
         </div>
       </dialog>
     </div>
 
     <script src="./card-data.js"></script>
+    <script src="./localization.js"></script>
+    <script src="./card-localization.js"></script>
+    <script src="./generated-card-content.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

@@ -90,6 +90,11 @@ button {
   gap: 0.7rem;
 }
 
+.language-switcher {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
 .utility-link {
   padding: 0.65rem 0.95rem;
   border-radius: 999px;
@@ -102,6 +107,17 @@ button {
   color: var(--text);
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+.language-link {
+  min-width: 3.3rem;
+  justify-content: center;
+}
+
+.language-link.is-active {
+  color: #2b1b08;
+  background: linear-gradient(135deg, rgba(255, 233, 191, 0.96), rgba(255, 211, 126, 0.92));
+  border-color: rgba(255, 218, 147, 0.58);
 }
 
 .noise {
@@ -325,7 +341,7 @@ button {
 .deck-card-back {
   background:
     linear-gradient(rgba(10, 8, 15, 0.04), rgba(10, 8, 15, 0.04)),
-    url("./Tarot%20artwork/smith-waite-deck-back_2013.webp") center / cover no-repeat;
+    url("./Artwork/smith-waite-deck-back_2013.webp") center / cover no-repeat;
 }
 
 .deck-card-one {
