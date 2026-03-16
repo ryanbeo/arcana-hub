@@ -341,7 +341,7 @@ button {
 .deck-card-back {
   background:
     linear-gradient(rgba(10, 8, 15, 0.04), rgba(10, 8, 15, 0.04)),
-    url("./Artwork/smith-waite-deck-back_2013.webp") center / cover no-repeat;
+    url("./Tarot%20artwork/smith-waite-deck-back_2013.webp") center / cover no-repeat;
 }
 
 .deck-card-one {

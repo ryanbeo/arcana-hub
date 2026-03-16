@@ -81,7 +81,7 @@
   ];
 
   function localArtworkUrl(fileName) {
-    return encodeURI(`./Artwork/${fileName}`);
+    return encodeURI(`./Tarot artwork/${fileName}`);
   }
 
   const majorArcana = [

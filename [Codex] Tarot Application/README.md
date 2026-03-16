@@ -5,7 +5,7 @@ Arcana Daily is now a static tarot app with:
 - One deterministic card draw per day
 - Optional redraws that replace today’s saved card
 - A local tarot database for all 78 cards
-- Local bundled Rider-Waite artwork from the `Artwork` folder
+- Local bundled Rider-Waite artwork from the `Tarot artwork` folder
 - Artwork explanation for each card
 - Core keyword plus supporting keywords
 - Detailed reading sections for `general`, `work`, `relationship`, `money`, and `mind`
