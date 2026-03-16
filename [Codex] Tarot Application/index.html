@@ -14,21 +14,28 @@
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <div class="brand-mark">
-        <span class="brand-icon">✦</span>
+        <span class="brand-icon"><i class="ph ph-sparkle"></i></span>
         <span class="brand-name" id="brandName" data-i18n="brandName">Arcana Daily</span>
       </div>
       <div class="utility-links">
-        <div class="language-switcher" aria-label="Language switcher">
+        <div class="language-switcher" id="languageSwitcher" aria-label="Language switcher">
           <button class="utility-link language-link is-active" id="langEnglish" data-i18n="languageEnglish" type="button">EN</button>
           <button class="utility-link language-link" id="langVietnamese" data-i18n="languageVietnamese" type="button">VI</button>
         </div>
-        <button class="utility-link" id="historyLink" data-i18n="historyLink" type="button">Card history</button>
-        <button class="utility-link" id="refreshLink" data-i18n="refreshLink" type="button">Refresh</button>
+        <button class="utility-link icon-support" id="historyLink" type="button" title="Card history" aria-label="Card history">
+          <span class="button-icon" aria-hidden="true"><i class="ph ph-stack"></i></span>
+          <span class="utility-label" data-i18n="historyLink">Card history</span>
+        </button>
+        <button class="utility-link icon-support" id="refreshLink" type="button" title="Refresh" aria-label="Refresh">
+          <span class="button-icon" aria-hidden="true"><i class="ph ph-arrow-clockwise"></i></span>
+          <span class="utility-label" data-i18n="refreshLink">Refresh</span>
+        </button>
       </div>
       <div class="noise"></div>
       <div class="halo halo-one"></div>
@@ -51,7 +58,10 @@
             <span class="deck-glow"></span>
           </button>
 
-          <button class="draw-cta" id="deckButton" data-i18n="drawButton" type="button">Draw your card</button>
+          <button class="draw-cta icon-support" id="deckButton" type="button">
+            <span class="button-icon" aria-hidden="true"><i class="ph ph-cards"></i></span>
+            <span class="button-label" data-i18n="drawButton">Draw your card</span>
+          </button>
 
           <div class="reveal-panel hidden" id="revealPanel">
             <p class="eyebrow" id="dailyRevealEyebrow" data-i18n="dailyReveal">Daily reveal</p>
@@ -59,25 +69,40 @@
             <h1 id="revealHeadline"></h1>
             <div class="reveal-tags" id="revealTags"></div>
             <div class="reveal-actions">
-              <button class="ghost-button reveal-button" id="continueButton" data-i18n="continueButton" type="button">
-                Read my reading
+              <button class="ghost-button reveal-button icon-support" id="continueButton" type="button">
+                <span class="button-icon" aria-hidden="true"><i class="ph ph-shooting-star"></i></span>
+                <span class="button-label" data-i18n="continueButton">Read my reading</span>
               </button>
-              <button class="ghost-button reveal-button secondary-button hidden" id="redrawButton" data-i18n="redrawButton" type="button">
-                Redraw card
+              <button class="ghost-button reveal-button secondary-button hidden icon-support" id="redrawButton" type="button">
+                <span class="button-icon" aria-hidden="true"><i class="ph ph-arrow-counter-clockwise"></i></span>
+                <span class="button-label" data-i18n="redrawButton">Redraw card</span>
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="reading-viewport" id="readingViewport">
+      <section class="summary-viewport" id="summaryViewport">
+        <div class="summary-stage">
+          <article class="summary-panel hidden" id="summaryPanel">
+            <div class="section-header compact">
+              <div>
+                <p class="eyebrow" id="cardArcana"></p>
+                <h2 id="cardName"></h2>
+              </div>
+              <span class="status-badge muted" id="cardOrientation"></span>
+            </div>
+
+            <p class="reading-summary text-reveal" id="cardSummary"></p>
+          </article>
+        </div>
+      </section>
+
+      <section class="detailed-viewport" id="detailedViewport">
         <header class="reading-topbar">
           <div>
             <p class="eyebrow" id="readingEyebrow" data-i18n="readingEyebrow">Arcana Daily</p>
             <h1 id="dateHeading"></h1>
-          </div>
-          <div class="reading-actions">
-            <button class="ghost-button hidden" id="shareButton" data-i18n="shareButton" type="button">Download reading card</button>
           </div>
         </header>
 
@@ -85,29 +110,34 @@
           <section class="reading-layout hidden" id="readingLayout">
             <article class="card-column panel">
               <div class="card-frame">
-                <div class="tarot-card" id="tarotCard">
-                  <div class="card-face">
-                    <img id="cardArtwork" alt="" />
+                <button class="tarot-card" id="tarotCard" type="button" aria-label="Flip card">
+                  <div class="tarot-card-inner">
+                    <div class="card-face card-face-front">
+                      <img id="cardArtwork" alt="" />
+                    </div>
+                    <div class="card-face card-face-back">
+                      <div class="card-back-copy">
+                        <div class="block-heading">
+                          <span class="icon-badge"><i class="ph ph-eye"></i></span>
+                          <div>
+                            <p class="eyebrow" data-i18n="artworkEyebrow">Artwork speaks through</p>
+                          </div>
+                        </div>
+                        <p id="cardArtworkBackText"></p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </button>
               </div>
-            </article>
-
-            <article class="reading-column panel">
-              <div class="section-header compact">
-                <div>
-                  <p class="eyebrow" id="cardArcana"></p>
-                  <h2 id="cardName"></h2>
-                </div>
-                <span class="status-badge muted" id="cardOrientation"></span>
-              </div>
-
-              <p class="reading-summary text-reveal" id="cardSummary"></p>
+              <button class="card-flip-button ghost-button secondary-button icon-support" id="cardFlipButton" type="button">
+                <span class="button-icon" aria-hidden="true"><i class="ph ph-arrows-horizontal"></i></span>
+                <span class="button-label" data-i18n="flipCardButton">Flip the card</span>
+              </button>
 
               <div class="keyword-row">
                 <div class="keyword-card">
                   <div class="block-heading">
-                    <span class="icon-badge">✦</span>
+                    <span class="icon-badge"><i class="ph ph-sparkle"></i></span>
                     <div>
                       <p class="eyebrow" id="coreKeywordEyebrow" data-i18n="coreKeyword">Core keyword</p>
                       <h3 id="primaryKeyword"></h3>
@@ -115,44 +145,37 @@
                   </div>
                   <p id="keywordSupport"></p>
                 </div>
-                <div class="keyword-card">
-                  <div class="block-heading">
-                    <span class="icon-badge">◌</span>
-                    <div>
-                      <p class="eyebrow" id="artworkEyebrow" data-i18n="artworkEyebrow">Artwork speaks through</p>
-                    </div>
-                  </div>
-                  <p id="artworkDescription"></p>
-                </div>
               </div>
+            </article>
 
+            <article class="reading-column panel">
               <section class="theme-tabs-panel">
                 <div class="theme-tabs" role="tablist" aria-label="Reading themes">
                   <button class="theme-tab is-active" id="tab-general" type="button" role="tab" aria-selected="true" aria-controls="themePanel" data-theme="general">
-                    <span class="theme-tab-icon">☼</span>
+                    <span class="theme-tab-icon"><i class="ph ph-sun-dim"></i></span>
                     <span id="tabLabelGeneral" data-i18n="themeGeneral">General</span>
                   </button>
                   <button class="theme-tab" id="tab-work" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="work">
-                    <span class="theme-tab-icon">✷</span>
+                    <span class="theme-tab-icon"><i class="ph ph-briefcase"></i></span>
                     <span id="tabLabelWork" data-i18n="themeWork">Work</span>
                   </button>
                   <button class="theme-tab" id="tab-relationship" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="relationship">
-                    <span class="theme-tab-icon">♡</span>
+                    <span class="theme-tab-icon"><i class="ph ph-heart"></i></span>
                     <span id="tabLabelRelationship" data-i18n="themeRelationship">Relationship</span>
                   </button>
                   <button class="theme-tab" id="tab-money" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="money">
-                    <span class="theme-tab-icon">◈</span>
+                    <span class="theme-tab-icon"><i class="ph ph-coins"></i></span>
                     <span id="tabLabelMoney" data-i18n="themeMoney">Money</span>
                   </button>
                   <button class="theme-tab" id="tab-mind" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="mind">
-                    <span class="theme-tab-icon">☾</span>
+                    <span class="theme-tab-icon"><i class="ph ph-moon-stars"></i></span>
                     <span id="tabLabelMind" data-i18n="themeMind">Mind</span>
                   </button>
                 </div>
 
                 <article class="theme-block theme-reading" id="themePanel" role="tabpanel" aria-labelledby="tab-general">
                   <div class="block-heading">
-                    <span class="icon-badge" id="activeThemeIcon">☼</span>
+                    <span class="icon-badge" id="activeThemeIcon"><i class="ph ph-sun-dim"></i></span>
                     <div>
                       <p class="eyebrow" id="detailedReadingEyebrow" data-i18n="detailedReading">Detailed reading</p>
                       <h3 id="activeThemeTitle">General</h3>
@@ -164,6 +187,13 @@
               </section>
             </article>
           </section>
+
+          <div class="reading-footer-actions">
+            <button class="ghost-button hidden icon-support" id="shareButton" type="button">
+              <span class="button-icon" aria-hidden="true"><i class="ph ph-download-simple"></i></span>
+              <span class="button-label" data-i18n="shareButton">Download reading card</span>
+            </button>
+          </div>
 
           <section class="history-panel panel">
             <div class="section-header compact">
@@ -177,6 +207,14 @@
               <p class="empty-state" id="historyEmptyState" data-i18n="historyEmpty">Reveal a card to start your reading history.</p>
             </div>
           </section>
+
+          <footer class="site-footer">
+            <p>Created by Ryan Béo ✦ 2026</p>
+            <p>
+              Pay me a visit
+              <a href="https://ryanbeo.framer.website/" target="_blank" rel="noreferrer">ryanbeo.framer.website</a>
+            </p>
+          </footer>
         </main>
       </section>
 
@@ -187,7 +225,9 @@
               <p class="eyebrow" id="archiveEyebrow" data-i18n="archiveEyebrow">Archive</p>
               <h2 id="historyDialogHeading" data-i18n="historyDialogHeading">Your card history</h2>
             </div>
-            <button class="dialog-close" id="closeHistoryButton" type="button" aria-label="Close">×</button>
+            <button class="dialog-close" id="closeHistoryButton" type="button" aria-label="Close">
+              <i class="ph ph-x"></i>
+            </button>
           </div>
           <div class="history-list history-list-dialog" id="historyDialogList">
             <p class="empty-state" id="historyDialogEmptyState" data-i18n="historyEmpty">Reveal a card to start your reading history.</p>
@@ -202,14 +242,22 @@
               <p class="eyebrow" id="previewEyebrow" data-i18n="previewEyebrow">Preview</p>
               <h2 id="exportHeading" data-i18n="exportHeading">Your reading card</h2>
             </div>
-            <button class="dialog-close" id="closeExportButton" type="button" aria-label="Close">×</button>
+            <button class="dialog-close" id="closeExportButton" type="button" aria-label="Close">
+              <i class="ph ph-x"></i>
+            </button>
           </div>
           <div class="export-preview-shell">
             <img id="exportPreviewImage" alt="Preview of the reading card download" />
           </div>
           <div class="export-actions">
-            <button class="ghost-button secondary-button" id="cancelExportButton" data-i18n="cancel" type="button">Cancel</button>
-            <button class="ghost-button" id="confirmDownloadButton" data-i18n="downloadImage" type="button">Download image</button>
+            <button class="ghost-button secondary-button icon-support" id="cancelExportButton" type="button">
+              <span class="button-icon" aria-hidden="true"><i class="ph ph-x"></i></span>
+              <span class="button-label" data-i18n="cancel">Cancel</span>
+            </button>
+            <button class="ghost-button icon-support" id="confirmDownloadButton" type="button">
+              <span class="button-icon" aria-hidden="true"><i class="ph ph-download-simple"></i></span>
+              <span class="button-label" data-i18n="downloadImage">Download image</span>
+            </button>
           </div>
         </div>
       </dialog>
