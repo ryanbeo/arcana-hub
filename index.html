@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arcana Daily</title>
+    <meta
+      name="description"
+      content="Draw one tarot card each day and explore its artwork, core symbolism, and themed reading."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="brand-mark">
+        <span class="brand-icon">✦</span>
+        <span class="brand-name">Arcana Daily</span>
+      </div>
+      <div class="utility-links">
+        <button class="utility-link" id="historyLink" type="button">Card history</button>
+        <button class="utility-link" id="refreshLink" type="button">Refresh</button>
+      </div>
+      <div class="noise"></div>
+      <div class="halo halo-one"></div>
+      <div class="halo halo-two"></div>
+      <div class="cosmos-layer cosmos-layer-far" data-parallax-layer="far"></div>
+      <div class="cosmos-layer cosmos-layer-mid" data-parallax-layer="mid"></div>
+      <div class="cosmos-layer cosmos-layer-near" data-parallax-layer="near"></div>
+
+      <section class="draw-viewport" id="drawViewport">
+        <div class="draw-stage">
+          <button class="deck-shell" id="deckShell" type="button" aria-live="polite" aria-label="Draw or redraw a tarot card">
+            <span class="deck-stack">
+              <span class="deck-card deck-card-back deck-card-one"></span>
+              <span class="deck-card deck-card-back deck-card-two"></span>
+              <span class="deck-card deck-card-back deck-card-three"></span>
+              <span class="deck-card deck-card-front" id="heroPulledCard">
+                <img id="heroCardArtwork" alt="" />
+              </span>
+            </span>
+            <span class="deck-glow"></span>
+          </button>
+
+          <button class="draw-cta" id="deckButton" type="button">Draw your card</button>
+
+          <div class="reveal-panel hidden" id="revealPanel">
+            <p class="eyebrow">Daily reveal</p>
+            <p class="reveal-kicker">Your card today is</p>
+            <h1 id="revealHeadline"></h1>
+            <div class="reveal-tags" id="revealTags"></div>
+            <div class="reveal-actions">
+              <button class="ghost-button reveal-button" id="continueButton" type="button">
+                Read my reading
+              </button>
+              <button class="ghost-button reveal-button secondary-button hidden" id="redrawButton" type="button">
+                Redraw card
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="reading-viewport" id="readingViewport">
+        <header class="reading-topbar">
+          <div>
+            <p class="eyebrow">Arcana Daily</p>
+            <h1 id="dateHeading"></h1>
+          </div>
+          <div class="reading-actions">
+            <button class="ghost-button hidden" id="shareButton" type="button">Download reading card</button>
+          </div>
+        </header>
+
+        <main class="reading-content">
+          <section class="reading-layout hidden" id="readingLayout">
+            <article class="card-column panel">
+              <div class="card-frame">
+                <div class="tarot-card" id="tarotCard">
+                  <div class="card-face">
+                    <img id="cardArtwork" alt="" />
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="reading-column panel">
+              <div class="section-header compact">
+                <div>
+                  <p class="eyebrow" id="cardArcana"></p>
+                  <h2 id="cardName"></h2>
+                </div>
+                <span class="status-badge muted" id="cardOrientation"></span>
+              </div>
+
+              <p class="reading-summary" id="cardSummary"></p>
+
+              <div class="keyword-row">
+                <div class="keyword-card">
+                  <div class="block-heading">
+                    <span class="icon-badge">✦</span>
+                    <div>
+                      <p class="eyebrow">Core keyword</p>
+                      <h3 id="primaryKeyword"></h3>
+                    </div>
+                  </div>
+                  <p id="keywordSupport"></p>
+                </div>
+                <div class="keyword-card">
+                  <div class="block-heading">
+                    <span class="icon-badge">◌</span>
+                    <div>
+                      <p class="eyebrow">Artwork speaks through</p>
+                    </div>
+                  </div>
+                  <p id="artworkDescription"></p>
+                </div>
+              </div>
+
+              <div class="theme-grid">
+                <article class="theme-block">
+                  <div class="block-heading">
+                    <span class="icon-badge">☼</span>
+                    <h3>General</h3>
+                  </div>
+                  <p id="themeGeneral"></p>
+                </article>
+                <article class="theme-block">
+                  <div class="block-heading">
+                    <span class="icon-badge">✷</span>
+                    <h3>Work</h3>
+                  </div>
+                  <p id="themeWork"></p>
+                </article>
+                <article class="theme-block">
+                  <div class="block-heading">
+                    <span class="icon-badge">♡</span>
+                    <h3>Relationship</h3>
+                  </div>
+                  <p id="themeRelationship"></p>
+                </article>
+                <article class="theme-block">
+                  <div class="block-heading">
+                    <span class="icon-badge">◈</span>
+                    <h3>Money</h3>
+                  </div>
+                  <p id="themeMoney"></p>
+                </article>
+                <article class="theme-block theme-block-wide">
+                  <div class="block-heading">
+                    <span class="icon-badge">☾</span>
+                    <h3>Mind</h3>
+                  </div>
+                  <p id="themeMind"></p>
+                </article>
+              </div>
+            </article>
+          </section>
+
+          <section class="history-panel panel">
+            <div class="section-header compact">
+              <div>
+                <p class="eyebrow">Daily history</p>
+                <h2>Your recent cards</h2>
+              </div>
+            </div>
+
+            <div class="history-list" id="historyList">
+              <p class="empty-state">Reveal a card to start your reading history.</p>
+            </div>
+          </section>
+        </main>
+      </section>
+
+      <dialog class="history-dialog" id="historyDialog">
+        <div class="history-dialog-card">
+          <div class="history-dialog-header">
+            <div>
+              <p class="eyebrow">Archive</p>
+              <h2>Your card history</h2>
+            </div>
+            <button class="dialog-close" id="closeHistoryButton" type="button" aria-label="Close">×</button>
+          </div>
+          <div class="history-list history-list-dialog" id="historyDialogList">
+            <p class="empty-state">Reveal a card to start your reading history.</p>
+          </div>
+        </div>
+      </dialog>
+    </div>
+
+    <script src="./card-data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
