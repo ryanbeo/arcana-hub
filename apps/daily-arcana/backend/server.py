@@ -1,20 +1,172 @@
 #!/usr/bin/env python3
+import csv
 import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "app.db"
 SESSION_COOKIE = "arcana_session"
 SESSION_DAYS = 30
+FRONTEND_ROOT = ROOT.parent / "frontend"
+DATA_DIR = FRONTEND_ROOT / "data"
+BOOK_SOURCE_PATH = DATA_DIR / "78 Degrees Of Wisdom [ENG].txt"
+CSV_SOURCE_PATH = DATA_DIR / "tarot-card-content-filled.csv"
+ALLOWED_ORIGIN = (os.environ.get("ALLOWED_ORIGIN") or "*").rstrip("/")
+DEFAULT_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+CLIENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{8,80}$")
+DEFAULT_INTERPRETATION = {
+    "en": {
+        "keywords": {"main": "", "supporting": ["", "", "", ""]},
+        "artwork_readthrough": "",
+        "general_reading": "",
+        "detailed_reading": {"general": "", "work": "", "relationship": "", "money": "", "mind": ""},
+    },
+    "vi": {
+        "keywords": {"main": "", "supporting": ["", "", "", ""]},
+        "artwork_readthrough": "",
+        "general_reading": "",
+        "detailed_reading": {"general": "", "work": "", "relationship": "", "money": "", "mind": ""},
+    },
+}
+PROMPT_TEMPLATE = """
+You are a sharp, intuitive tarot reading assistant with a subtle, slightly sassy personality.
+
+You are emotionally intelligent, perceptive, and occasionally playful, like a friend who tells the truth with a raised eyebrow.
+
+You will receive:
+1. A selected tarot card with structured meanings
+2. Relevant excerpts from reference materials
+3. A user's context (optional)
+
+Your task:
+- Interpret the card based on the provided material
+- Ground your interpretation in the supplied sources
+- Add light, intuitive synthesis only when it does not contradict the sources
+- Deliver the response in BOTH English and Vietnamese
+
+PERSONALITY GUIDELINES:
+- Be warm, human, and conversational
+- Use light wit sparingly and only when it fits naturally
+- Never be rude, mocking, or dismissive
+- If something is obvious but being avoided, gently point it out
+- Avoid cliches and overly mystical language
+
+SOURCE PRIORITY:
+- Treat Selected Card (`CARD_JSON`) as the primary source of truth
+- Use CSV-derived card content as secondary support
+- Use retrieved reference snippets as additional interpretive support
+- If sources conflict, prefer: `CARD_JSON` > CSV content > retrieved snippets
+
+RULES:
+- Do NOT contradict provided sources
+- Do NOT make absolute predictions
+- Do NOT invent personal details
+- If `USER_CONTEXT` is empty, do not mention it
+- If unclear, say so naturally
+- Keep insights specific, not generic
+
+OUTPUT REQUIREMENTS:
+- Return valid JSON only
+- Do not wrap the JSON in markdown fences
+- Do not include any text before or after the JSON
+- Preserve the exact schema below
+- Every field must be present
+- If something cannot be determined, use an empty string or empty array item without changing the schema
+
+Return in this exact JSON shape:
+
+{
+  "en": {
+    "keywords": {
+      "main": "",
+      "supporting": ["", "", "", ""]
+    },
+    "artwork_readthrough": "",
+    "general_reading": "",
+    "detailed_reading": {
+      "general": "",
+      "work": "",
+      "relationship": "",
+      "money": "",
+      "mind": ""
+    }
+  },
+  "vi": {
+    "keywords": {
+      "main": "",
+      "supporting": ["", "", "", ""]
+    },
+    "artwork_readthrough": "",
+    "general_reading": "",
+    "detailed_reading": {
+      "general": "",
+      "work": "",
+      "relationship": "",
+      "money": "",
+      "mind": ""
+    }
+  }
+}
+
+CONTENT GUIDELINES:
+
+Keywords:
+- 1 main keyword
+- 4 supporting keywords
+
+Artwork readthrough:
+- 2-3 sentences
+- Describe symbolism, mood, posture, colors, and atmosphere
+- Interpret visuals meaningfully, not just literally
+
+General reading:
+- 1 short paragraph
+- 3-5 sentences
+- Capture the overall energy/message of the day
+
+Detailed reading:
+- Provide exactly 2 short paragraphs per section
+- Each paragraph should be 2-4 sentences
+
+Section intent:
+- general: expand the theme with insight and nuance
+- work: career, productivity, direction, decision-making
+- relationship: emotional dynamics, connection, distance, patterns
+- money: financial mindset, caution, opportunity
+- mind: internal state, psychology, habits, self-awareness
+
+LANGUAGE RULES:
+
+English:
+- Natural, modern, clear, slightly witty
+- Avoid over-poetic tone
+
+Vietnamese:
+- Natural and fluent, not word-for-word translation
+- Preserve emotional nuance and rhythm
+- Slightly intimate and conversational
+
+Selected Card:
+{{CARD_JSON}}
+
+Relevant Source Excerpts:
+{{RETRIEVED_SNIPPETS}}
+
+User Context (if any):
+{{USER_CONTEXT}}
+""".strip()
 
 
 MAJOR_ARCANA = [
@@ -487,12 +639,23 @@ def build_deck():
 
 DECK = build_deck()
 DECK_BY_KEY = {card["key"]: card for card in DECK}
+CSV_CONTENT_BY_CARD = None
+BOOK_TEXT_CACHE = None
 
 
 def connect_db():
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
+
+
+def ensure_column(connection, table_name, column_name, definition):
+    columns = {
+        row["name"]
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 def init_db():
@@ -527,6 +690,8 @@ def init_db():
             );
             """
         )
+        ensure_column(connection, "readings", "interpretation_json", "TEXT")
+        ensure_column(connection, "readings", "user_context", "TEXT")
         connection.commit()
     finally:
         connection.close()
@@ -572,14 +737,297 @@ def row_to_dict(row):
     return {key: row[key] for key in row.keys()}
 
 
+def get_csv_content_by_card():
+    global CSV_CONTENT_BY_CARD
+    if CSV_CONTENT_BY_CARD is not None:
+        return CSV_CONTENT_BY_CARD
+
+    content = {}
+    if CSV_SOURCE_PATH.exists():
+        with CSV_SOURCE_PATH.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                content[row["card_key"]] = row
+    CSV_CONTENT_BY_CARD = content
+    return CSV_CONTENT_BY_CARD
+
+
+def get_book_text():
+    global BOOK_TEXT_CACHE
+    if BOOK_TEXT_CACHE is not None:
+        return BOOK_TEXT_CACHE
+
+    BOOK_TEXT_CACHE = BOOK_SOURCE_PATH.read_text(encoding="utf-8") if BOOK_SOURCE_PATH.exists() else ""
+    return BOOK_TEXT_CACHE
+
+
+def current_iso():
+    return iso_timestamp(utc_now())
+
+
+def sanitize_client_id(value):
+    candidate = (value or "").strip()
+    return candidate if CLIENT_ID_PATTERN.match(candidate) else None
+
+
+def orientation_label(orientation):
+    return "Reversed" if orientation == "reversed" else "Upright"
+
+
+def get_csv_card_row(card_key):
+    return get_csv_content_by_card().get(card_key)
+
+
+def card_variants(card):
+    variants = {card["name"], card["key"].replace("-", " ")}
+    if card["name"].startswith("The "):
+        variants.add(card["name"][4:])
+    if card["key"] == "strength":
+        variants.add("Strength")
+    return [value for value in variants if value]
+
+
+def build_book_snippets(card, max_snippets=3, radius=260):
+    book_text = get_book_text()
+    if not book_text:
+        return []
+
+    snippets = []
+    lowered = book_text.lower()
+    for variant in card_variants(card):
+        start = 0
+        needle = variant.lower()
+        while len(snippets) < max_snippets:
+            index = lowered.find(needle, start)
+            if index == -1:
+                break
+            excerpt_start = max(0, index - radius)
+            excerpt_end = min(len(book_text), index + len(needle) + radius)
+            snippet = " ".join(book_text[excerpt_start:excerpt_end].split())
+            if snippet and snippet not in snippets:
+                snippets.append(snippet)
+            start = index + len(needle)
+        if len(snippets) >= max_snippets:
+            break
+    return snippets
+
+
+def build_card_payload(card, orientation, csv_row):
+    payload = {
+        "key": card["key"],
+        "name": card["name"],
+        "arcana_label": card["arcanaLabel"],
+        "orientation": orientation,
+        "orientation_label": orientation_label(orientation),
+        "keywords": card["keywords"],
+        "summary": card["summary"],
+        "meaning": card["meaning"],
+        "focus": card["focus"],
+        "reflection": card["reflection"],
+        "affirmation": card["affirmation"],
+    }
+    if csv_row:
+        payload["csv_support"] = {
+            "content_name_en": csv_row.get("content_name_en", ""),
+            "content_primary_keyword_en": csv_row.get("content_primary_keyword_en", ""),
+            "content_keywords_en": csv_row.get("content_keywords_en", ""),
+            "content_artwork_en": csv_row.get("content_artwork_en", ""),
+            "content_summary_upright_en": csv_row.get("content_summary_upright_en", ""),
+            "content_summary_reversed_en": csv_row.get("content_summary_reversed_en", ""),
+            "content_name_vi": csv_row.get("content_name_vi", ""),
+            "content_primary_keyword_vi": csv_row.get("content_primary_keyword_vi", ""),
+            "content_keywords_vi": csv_row.get("content_keywords_vi", ""),
+            "content_artwork_vi": csv_row.get("content_artwork_vi", ""),
+            "content_summary_upright_vi": csv_row.get("content_summary_upright_vi", ""),
+            "content_summary_reversed_vi": csv_row.get("content_summary_reversed_vi", ""),
+        }
+    return payload
+
+
+def build_prompt(card, orientation, csv_row, user_context):
+    card_payload = json.dumps(build_card_payload(card, orientation, csv_row), ensure_ascii=False, indent=2)
+    snippets = build_book_snippets(card)
+    csv_support = json.dumps(csv_row, ensure_ascii=False, indent=2) if csv_row else "{}"
+    retrieved = json.dumps(
+        {"csv_reference": csv_support, "book_snippets": snippets},
+        ensure_ascii=False,
+        indent=2,
+    )
+    return (
+        PROMPT_TEMPLATE.replace("{{CARD_JSON}}", card_payload)
+        .replace("{{RETRIEVED_SNIPPETS}}", retrieved)
+        .replace("{{USER_CONTEXT}}", user_context or "")
+    )
+
+
+def first_candidate_text(payload):
+    for candidate in payload.get("candidates", []):
+        content = candidate.get("content") or {}
+        parts = content.get("parts") or []
+        text = "".join(part.get("text", "") for part in parts if isinstance(part, dict))
+        if text.strip():
+            return text.strip()
+    return ""
+
+
+def extract_json_object(text):
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("Gemini response did not contain JSON")
+    return json.loads(text[start : end + 1])
+
+
+def normalize_interpretation(payload):
+    interpretation = json.loads(json.dumps(DEFAULT_INTERPRETATION))
+    if not isinstance(payload, dict):
+        return interpretation
+
+    for language in ("en", "vi"):
+        source = payload.get(language) or {}
+        keywords = source.get("keywords") or {}
+        supporting = keywords.get("supporting") or []
+        interpretation[language]["keywords"]["main"] = str(keywords.get("main") or "").strip()
+        interpretation[language]["keywords"]["supporting"] = [
+            str(item or "").strip() for item in list(supporting)[:4]
+        ]
+        while len(interpretation[language]["keywords"]["supporting"]) < 4:
+            interpretation[language]["keywords"]["supporting"].append("")
+        interpretation[language]["artwork_readthrough"] = str(source.get("artwork_readthrough") or "").strip()
+        interpretation[language]["general_reading"] = str(source.get("general_reading") or "").strip()
+        detailed = source.get("detailed_reading") or {}
+        for theme_name in ("general", "work", "relationship", "money", "mind"):
+            interpretation[language]["detailed_reading"][theme_name] = str(
+                detailed.get(theme_name) or ""
+            ).strip()
+    return interpretation
+
+
+def fallback_interpretation(card, orientation, csv_row):
+    upright = orientation == "upright"
+    en_supporting = (csv_row.get("content_keywords_en", "").split("|") if csv_row else []) or card["keywords"]
+    vi_supporting = (csv_row.get("content_keywords_vi", "").split("|") if csv_row else []) or en_supporting
+    en_artwork = (
+        csv_row.get("content_artwork_en")
+        if csv_row
+        else f"{card['name']} carries a visual mood of {', '.join(card['keywords'][:2]).lower()}."
+    )
+    vi_artwork = (
+        csv_row.get("content_artwork_vi")
+        if csv_row
+        else f"Lá {card['name']} gợi ra bầu không khí của {', '.join(card['keywords'][:2]).lower()}."
+    )
+    en_summary = (
+        csv_row.get(f"content_summary_{orientation}_en")
+        if csv_row
+        else card["summary"]
+    )
+    vi_summary = (
+        csv_row.get(f"content_summary_{orientation}_vi")
+        if csv_row
+        else f"Năng lượng của {card['name']} đang mời bạn nhìn kỹ hơn điều mình thật sự biết."
+    )
+
+    interpretation = json.loads(json.dumps(DEFAULT_INTERPRETATION))
+    interpretation["en"]["keywords"]["main"] = (csv_row.get("content_primary_keyword_en") if csv_row else card["keywords"][0]) or card["keywords"][0]
+    interpretation["en"]["keywords"]["supporting"] = [item.strip() for item in en_supporting[:4]]
+    while len(interpretation["en"]["keywords"]["supporting"]) < 4:
+        interpretation["en"]["keywords"]["supporting"].append("")
+    interpretation["en"]["artwork_readthrough"] = en_artwork
+    interpretation["en"]["general_reading"] = en_summary
+    interpretation["vi"]["keywords"]["main"] = (csv_row.get("content_primary_keyword_vi") if csv_row else card["keywords"][0]) or card["keywords"][0]
+    interpretation["vi"]["keywords"]["supporting"] = [item.strip() for item in vi_supporting[:4]]
+    while len(interpretation["vi"]["keywords"]["supporting"]) < 4:
+        interpretation["vi"]["keywords"]["supporting"].append("")
+    interpretation["vi"]["artwork_readthrough"] = vi_artwork
+    interpretation["vi"]["general_reading"] = vi_summary
+
+    for theme_name in ("general", "work", "relationship", "money", "mind"):
+        en_value = ""
+        vi_value = ""
+        if csv_row:
+            en_value = csv_row.get(f"content_theme_{theme_name}_{orientation}_en", "")
+            vi_value = csv_row.get(f"content_theme_{theme_name}_{orientation}_vi", "")
+        interpretation["en"]["detailed_reading"][theme_name] = en_value or (
+            f"{card['name']} asks for a more {'direct' if upright else 'careful'} approach in {theme_name} today. "
+            f"Stay with {card['focus'].lower()} and notice where the lesson is refusing to stay hidden."
+        )
+        interpretation["vi"]["detailed_reading"][theme_name] = vi_value or (
+            f"Trong phương diện {theme_name}, {card['name']} đang nhắc bạn đi {'thẳng' if upright else 'chậm'} hơn. "
+            f"Hãy ở lại với bài học này đủ lâu để phần thật sự quan trọng tự lộ ra."
+        )
+    return interpretation
+
+
+def call_gemini(prompt):
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY")
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.9,
+            "topP": 0.95,
+            "responseMimeType": "application/json",
+        },
+    }
+    request = Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{DEFAULT_GEMINI_MODEL}:generateContent",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=40) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    return extract_json_object(first_candidate_text(data))
+
+
+def generate_interpretation(card_key, orientation, user_context=""):
+    card = DECK_BY_KEY[card_key]
+    csv_row = get_csv_card_row(card_key)
+    prompt = build_prompt(card, orientation, csv_row, user_context)
+    try:
+        return normalize_interpretation(call_gemini(prompt))
+    except (HTTPError, URLError, TimeoutError, ValueError, RuntimeError, json.JSONDecodeError):
+        return fallback_interpretation(card, orientation, csv_row)
+
+
 class TarotRequestHandler(BaseHTTPRequestHandler):
     server_version = "ArcanaDaily/1.0"
 
     def log_message(self, format, *args):
         return
 
+    def query_params(self):
+        return parse_qs(urlparse(self.path).query)
+
+    def cors_headers(self):
+        origin = (self.headers.get("Origin") or "").rstrip("/")
+        allow_origin = "*"
+        if ALLOWED_ORIGIN != "*":
+            allow_origin = ALLOWED_ORIGIN if origin == ALLOWED_ORIGIN else "null"
+        return {
+            "Access-Control-Allow-Origin": allow_origin,
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-Client-Id",
+            "Vary": "Origin",
+        }
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        for key, value in self.cors_headers().items():
+            self.send_header(key, value)
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            self.send_json(200, {"ok": True, "timestamp": current_iso()})
+            return
         if parsed.path == "/api/session":
             self.handle_session()
             return
@@ -652,6 +1100,8 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        for key, value in self.cors_headers().items():
+            self.send_header(key, value)
         if extra_headers:
             for key, value in extra_headers.items():
                 self.send_header(key, value)
@@ -713,11 +1163,58 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
                 connection.close()
         return f"{SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0"
 
+    def get_client_id(self, payload=None):
+        query = self.query_params()
+        candidate = (
+            (payload or {}).get("client_id")
+            or self.headers.get("X-Client-Id")
+            or (query.get("client_id", [None])[0])
+        )
+        return sanitize_client_id(candidate)
+
+    def get_or_create_client_user(self, client_id):
+        email = f"guest+{client_id}@arcana.local"
+        connection = connect_db()
+        try:
+            row = connection.execute(
+                "SELECT id, name, email FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
+            if row:
+                return row_to_dict(row)
+
+            guest_name = f"Guest {client_id[:8]}"
+            connection.execute(
+                "INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                (guest_name, email, hash_password(client_id), current_iso()),
+            )
+            connection.commit()
+            row = connection.execute(
+                "SELECT id, name, email FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
+            return row_to_dict(row)
+        finally:
+            connection.close()
+
+    def get_effective_user(self, payload=None):
+        user = self.get_current_user()
+        if user:
+            return user
+        client_id = self.get_client_id(payload)
+        if not client_id:
+            return None
+        return self.get_or_create_client_user(client_id)
+
     def get_today_reading(self, user_id):
         connection = connect_db()
         try:
             row = connection.execute(
-                "SELECT id, draw_date, card_key, orientation, created_at FROM readings WHERE user_id = ? AND draw_date = ?",
+                """
+                SELECT id, draw_date, card_key, orientation, created_at, interpretation_json, user_context
+                FROM readings
+                WHERE user_id = ? AND draw_date = ?
+                """,
                 (user_id, date_key_local()),
             ).fetchone()
             return row_to_dict(row) if row else None
@@ -729,7 +1226,7 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         try:
             rows = connection.execute(
                 """
-                SELECT id, draw_date, card_key, orientation, created_at
+                SELECT id, draw_date, card_key, orientation, created_at, interpretation_json, user_context
                 FROM readings
                 WHERE user_id = ?
                 ORDER BY draw_date DESC
@@ -741,27 +1238,42 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         finally:
             connection.close()
 
+    def serialize_reading(self, row):
+        reading = dict(row)
+        interpretation_raw = reading.get("interpretation_json")
+        try:
+            interpretation = normalize_interpretation(json.loads(interpretation_raw)) if interpretation_raw else None
+        except json.JSONDecodeError:
+            interpretation = None
+        reading["interpretation"] = interpretation
+        return reading
+
     def handle_session(self):
-        user = self.get_current_user()
+        payload = self.read_json() if self.command == "POST" else None
+        user = self.get_effective_user(payload)
         if not user:
             self.send_json(200, {"user": None, "today_reading": None, "history": []})
             return
+
+        today_reading = self.get_today_reading(user["id"])
+        history = self.get_history(user["id"])
 
         self.send_json(
             200,
             {
                 "user": user,
-                "today_reading": self.get_today_reading(user["id"]),
-                "history": self.get_history(user["id"]),
+                "today_reading": self.serialize_reading(today_reading) if today_reading else None,
+                "history": [self.serialize_reading(entry) for entry in history],
             },
         )
 
     def handle_history(self):
-        user = self.get_current_user()
+        payload = self.read_json() if self.command == "POST" else None
+        user = self.get_effective_user(payload)
         if not user:
-            self.send_json(401, {"error": "Sign in required"})
+            self.send_json(401, {"error": "Missing client_id"})
             return
-        self.send_json(200, {"history": self.get_history(user["id"])})
+        self.send_json(200, {"history": [self.serialize_reading(entry) for entry in self.get_history(user["id"])]})
 
     def handle_signup(self):
         payload = self.read_json()
@@ -834,35 +1346,81 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         self.send_json(200, {"ok": True}, {"Set-Cookie": self.clear_session()})
 
     def handle_draw(self):
-        user = self.get_current_user()
+        payload = self.read_json()
+        user = self.get_effective_user(payload)
         if not user:
-            self.send_json(401, {"error": "Sign in required"})
+            self.send_json(401, {"error": "Missing client_id"})
             return
 
+        redraw = bool(payload.get("redraw"))
+        user_context = (payload.get("user_context") or "").strip()
         existing = self.get_today_reading(user["id"])
-        if existing:
-            self.send_json(200, {"reading": existing, "history": self.get_history(user["id"])})
+        if existing and not redraw:
+            self.send_json(
+                200,
+                {
+                    "reading": self.serialize_reading(existing),
+                    "history": [self.serialize_reading(entry) for entry in self.get_history(user["id"])],
+                },
+            )
             return
 
         draw_date = date_key_local()
-        card_key, orientation = pick_daily_reading(user["id"], draw_date)
+        if redraw:
+            seed = secrets.randbelow(len(DECK))
+            card_key = DECK[seed]["key"]
+            orientation = "reversed" if secrets.randbelow(2) else "upright"
+        else:
+            card_key, orientation = pick_daily_reading(user["id"], draw_date)
         created_at = iso_timestamp(utc_now())
+        interpretation = generate_interpretation(card_key, orientation, user_context)
 
         connection = connect_db()
         try:
-            try:
+            if existing and redraw:
                 connection.execute(
                     """
-                    INSERT INTO readings (user_id, draw_date, card_key, orientation, created_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    UPDATE readings
+                    SET card_key = ?, orientation = ?, created_at = ?, interpretation_json = ?, user_context = ?
+                    WHERE user_id = ? AND draw_date = ?
                     """,
-                    (user["id"], draw_date, card_key, orientation, created_at),
+                    (
+                        card_key,
+                        orientation,
+                        created_at,
+                        json.dumps(interpretation, ensure_ascii=False),
+                        user_context,
+                        user["id"],
+                        draw_date,
+                    ),
                 )
                 connection.commit()
-            except sqlite3.IntegrityError:
-                pass
+            else:
+                try:
+                    connection.execute(
+                        """
+                        INSERT INTO readings (user_id, draw_date, card_key, orientation, created_at, interpretation_json, user_context)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            user["id"],
+                            draw_date,
+                            card_key,
+                            orientation,
+                            created_at,
+                            json.dumps(interpretation, ensure_ascii=False),
+                            user_context,
+                        ),
+                    )
+                    connection.commit()
+                except sqlite3.IntegrityError:
+                    pass
             row = connection.execute(
-                "SELECT id, draw_date, card_key, orientation, created_at FROM readings WHERE user_id = ? AND draw_date = ?",
+                """
+                SELECT id, draw_date, card_key, orientation, created_at, interpretation_json, user_context
+                FROM readings
+                WHERE user_id = ? AND draw_date = ?
+                """,
                 (user["id"], draw_date),
             ).fetchone()
         finally:
@@ -870,15 +1428,19 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
 
         self.send_json(
             200,
-            {"reading": row_to_dict(row), "history": self.get_history(user["id"])},
+            {
+                "reading": self.serialize_reading(row_to_dict(row)),
+                "history": [self.serialize_reading(entry) for entry in self.get_history(user["id"])],
+            },
         )
 
 
 def main():
     init_db()
+    host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8000"))
-    server = ThreadingHTTPServer(("127.0.0.1", port), TarotRequestHandler)
-    print(f"Arcana Daily running at http://127.0.0.1:{port}")
+    server = ThreadingHTTPServer((host, port), TarotRequestHandler)
+    print(f"Arcana Daily running at http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
