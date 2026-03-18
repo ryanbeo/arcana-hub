@@ -2,6 +2,7 @@ const STORAGE_KEY = "arcana-daily-reading";
 const LANGUAGE_STORAGE_KEY = "arcana-daily-language";
 const CLIENT_ID_STORAGE_KEY = "arcana-daily-client-id";
 const API_BASE_URL = (window.ARCANA_API_BASE_URL || "https://arcana-hub.onrender.com").replace(/\/$/, "");
+const FRONTEND_ONLY_MODE = window.ARCANA_FRONTEND_ONLY !== false;
 
 const dateHeading = document.getElementById("dateHeading");
 const langEnglish = document.getElementById("langEnglish");
@@ -810,6 +811,23 @@ function renderHistory(history) {
 }
 
 async function syncUi() {
+  if (FRONTEND_ONLY_MODE) {
+    const state = loadState();
+    const dateKey = todayKey();
+    const todayReading = state.current && state.current.date === dateKey ? state.current : null;
+
+    dateHeading.textContent = formatToday();
+    shareButton.classList.toggle("hidden", !todayReading);
+
+    if (todayReading) {
+      renderReading(todayReading);
+      deckButton.classList.add("hidden");
+    }
+
+    renderHistory(state.history || []);
+    return;
+  }
+
   try {
     const session = await fetchSessionState();
     const saved = saveApiState(session.today_reading, session.history);
@@ -884,6 +902,15 @@ async function handleDraw() {
     return;
   }
 
+  if (FRONTEND_ONLY_MODE) {
+    const reading = { date: dateKey, ...randomDraw() };
+    state.current = reading;
+    state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
+    saveState(state);
+    revealAnimation(reading);
+    return;
+  }
+
   try {
     deckButton.disabled = true;
     const response = await requestDraw();
@@ -893,7 +920,6 @@ async function handleDraw() {
     return;
   } catch (error) {
     if (error.status === 429 && error.payload?.fallback_reading) {
-      pendingRateLimitAction = "draw";
       showRateLimitDialog(error.payload);
       return;
     }
@@ -901,12 +927,6 @@ async function handleDraw() {
   } finally {
     deckButton.disabled = false;
   }
-
-  const reading = { date: dateKey, ...randomDraw() };
-  state.current = reading;
-  state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
-  saveState(state);
-  revealAnimation(reading);
 }
 
 function resetDeckState() {
