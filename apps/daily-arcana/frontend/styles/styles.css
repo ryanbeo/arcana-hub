@@ -1022,6 +1022,19 @@ h3 {
   gap: 1rem;
 }
 
+.limit-dialog {
+  width: min(620px, calc(100% - 1rem));
+}
+
+.limit-dialog-card {
+  gap: 1.1rem;
+}
+
+.limit-message {
+  font-size: 1.02rem;
+  line-height: 1.8;
+}
+
 .export-preview-shell {
   display: grid;
   place-items: center;

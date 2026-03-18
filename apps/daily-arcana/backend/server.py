@@ -40,6 +40,18 @@ DEFAULT_INTERPRETATION = {
         "detailed_reading": {"general": "", "work": "", "relationship": "", "money": "", "mind": ""},
     },
 }
+RATE_LIMIT_COPY = {
+    "minute": {
+        "type": "minute",
+        "message": "The cosmic line is a little crowded right now. The cards are still whispering, just not all at once. Try again in a minute, or slip back to the structured reading if you're feeling tragically practical.",
+        "retry_after_seconds": 60,
+    },
+    "daily": {
+        "type": "daily",
+        "message": "The stars have closed the reading room for today. We've reached today's live reading limit, so the oracle is off duty until the sky resets. You can return tomorrow, or continue with the structured reading if you still want clarity without the drama.",
+        "retry_after_seconds": 86400,
+    },
+}
 PROMPT_TEMPLATE = """
 You are a sharp, intuitive tarot reading assistant with a subtle, slightly sassy personality.
 
@@ -765,6 +777,12 @@ def current_iso():
     return iso_timestamp(utc_now())
 
 
+def seconds_until_tomorrow():
+    now = datetime.now()
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(60, int((tomorrow - now).total_seconds()))
+
+
 def sanitize_client_id(value):
     candidate = (value or "").strip()
     return candidate if CLIENT_ID_PATTERN.match(candidate) else None
@@ -959,6 +977,12 @@ def fallback_interpretation(card, orientation, csv_row):
     return interpretation
 
 
+class GeminiRateLimitError(Exception):
+    def __init__(self, limit_type):
+        super().__init__(limit_type)
+        self.limit_type = limit_type
+
+
 def call_gemini(prompt):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -981,8 +1005,20 @@ def call_gemini(prompt):
         },
         method="POST",
     )
-    with urlopen(request, timeout=40) as response:
-        data = json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=40) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        try:
+            payload = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            payload = {}
+        message = json.dumps(payload).lower()
+        if exc.code == 429 or "rate limit" in message or "quota" in message:
+            limit_type = "daily" if "daily" in message or "per day" in message else "minute"
+            raise GeminiRateLimitError(limit_type) from exc
+        raise
     return extract_json_object(first_candidate_text(data))
 
 
@@ -991,9 +1027,26 @@ def generate_interpretation(card_key, orientation, user_context=""):
     csv_row = get_csv_card_row(card_key)
     prompt = build_prompt(card, orientation, csv_row, user_context)
     try:
-        return normalize_interpretation(call_gemini(prompt))
+        return {
+            "interpretation": normalize_interpretation(call_gemini(prompt)),
+            "source": "gemini",
+            "rate_limit": None,
+        }
+    except GeminiRateLimitError as exc:
+        limit_copy = dict(RATE_LIMIT_COPY[exc.limit_type])
+        if exc.limit_type == "daily":
+            limit_copy["retry_after_seconds"] = seconds_until_tomorrow()
+        return {
+            "interpretation": fallback_interpretation(card, orientation, csv_row),
+            "source": "structured_fallback",
+            "rate_limit": limit_copy,
+        }
     except (HTTPError, URLError, TimeoutError, ValueError, RuntimeError, json.JSONDecodeError):
-        return fallback_interpretation(card, orientation, csv_row)
+        return {
+            "interpretation": fallback_interpretation(card, orientation, csv_row),
+            "source": "structured_fallback",
+            "rate_limit": None,
+        }
 
 
 class TarotRequestHandler(BaseHTTPRequestHandler):
@@ -1246,6 +1299,8 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             interpretation = None
         reading["interpretation"] = interpretation
+        reading["source"] = "gemini" if interpretation else None
+        reading["rate_limit"] = None
         return reading
 
     def handle_session(self):
@@ -1373,7 +1428,34 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         else:
             card_key, orientation = pick_daily_reading(user["id"], draw_date)
         created_at = iso_timestamp(utc_now())
-        interpretation = generate_interpretation(card_key, orientation, user_context)
+        interpretation_result = generate_interpretation(card_key, orientation, user_context)
+        interpretation = interpretation_result["interpretation"]
+        source = interpretation_result["source"]
+        rate_limit = interpretation_result["rate_limit"]
+
+        if rate_limit:
+            fallback_reading = {
+                "id": None,
+                "draw_date": draw_date,
+                "card_key": card_key,
+                "orientation": orientation,
+                "created_at": created_at,
+                "interpretation": interpretation,
+                "source": source,
+                "rate_limit": rate_limit,
+                "user_context": user_context,
+            }
+            self.send_json(
+                429,
+                {
+                    "error": "rate_limit",
+                    "limit_type": rate_limit["type"],
+                    "message": rate_limit["message"],
+                    "retry_after_seconds": rate_limit["retry_after_seconds"],
+                    "fallback_reading": fallback_reading,
+                },
+            )
+            return
 
         connection = connect_db()
         try:
@@ -1429,7 +1511,11 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
         self.send_json(
             200,
             {
-                "reading": self.serialize_reading(row_to_dict(row)),
+                "reading": {
+                    **self.serialize_reading(row_to_dict(row)),
+                    "source": source,
+                    "rate_limit": None,
+                },
                 "history": [self.serialize_reading(entry) for entry in self.get_history(user["id"])],
             },
         )

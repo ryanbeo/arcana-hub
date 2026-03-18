@@ -18,7 +18,6 @@ const revealTags = document.getElementById("revealTags");
 const continueButton = document.getElementById("continueButton");
 const summaryViewport = document.getElementById("summaryViewport");
 const summaryPanel = document.getElementById("summaryPanel");
-const redrawButton = document.getElementById("redrawButton");
 const shareButton = document.getElementById("shareButton");
 const historyLink = document.getElementById("historyLink");
 const refreshLink = document.getElementById("refreshLink");
@@ -30,6 +29,14 @@ const closeExportButton = document.getElementById("closeExportButton");
 const cancelExportButton = document.getElementById("cancelExportButton");
 const confirmDownloadButton = document.getElementById("confirmDownloadButton");
 const exportPreviewImage = document.getElementById("exportPreviewImage");
+const limitDialog = document.getElementById("limitDialog");
+const closeLimitButton = document.getElementById("closeLimitButton");
+const limitHeading = document.getElementById("limitHeading");
+const limitMessage = document.getElementById("limitMessage");
+const limitPrimaryButton = document.getElementById("limitPrimaryButton");
+const limitPrimaryLabel = document.getElementById("limitPrimaryLabel");
+const limitSecondaryButton = document.getElementById("limitSecondaryButton");
+const limitSecondaryLabel = document.getElementById("limitSecondaryLabel");
 const readingLayout = document.getElementById("readingLayout");
 const tarotCard = document.getElementById("tarotCard");
 const cardFlipButton = document.getElementById("cardFlipButton");
@@ -138,6 +145,8 @@ let exportBlobUrl = "";
 let exportFileName = "arcana-daily-reading.png";
 const UI_COPY = window.APP_LOCALIZATION || { en: {}, vi: {} };
 const clientId = loadClientId();
+let pendingFallbackReading = null;
+let pendingRateLimit = null;
 
 function t(key) {
   return UI_COPY[currentLanguage][key] || UI_COPY.en[key] || key;
@@ -300,7 +309,10 @@ async function apiRequest(path, options = {}) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || `Request failed: ${response.status}`);
+    const error = new Error(payload.error || `Request failed: ${response.status}`);
+    error.payload = payload;
+    error.status = response.status;
+    throw error;
   }
 
   return payload;
@@ -324,6 +336,51 @@ async function requestDraw({ redraw = false, userContext = "" } = {}) {
 
 function readingContent(reading, language = currentLanguage) {
   return reading?.interpretation?.[language] || reading?.interpretation?.en || null;
+}
+
+function closeLimitDialog() {
+  if (limitDialog.open) {
+    limitDialog.close();
+  }
+  pendingFallbackReading = null;
+  pendingRateLimit = null;
+}
+
+function saveFallbackReading(reading) {
+  const normalized = normalizeApiReading(reading);
+  if (!normalized) {
+    return null;
+  }
+
+  const state = loadState();
+  const history = [...(state.history || []).filter((item) => item.date !== normalized.date), normalized].slice(-14);
+  saveState({
+    current: normalized,
+    history
+  });
+  return { reading: normalized, history };
+}
+
+function showRateLimitDialog(ratePayload) {
+  pendingFallbackReading = ratePayload?.fallback_reading || null;
+  pendingRateLimit = ratePayload || null;
+
+  if (!pendingRateLimit) {
+    return;
+  }
+
+  if (pendingRateLimit.limit_type === "daily") {
+    limitHeading.textContent = "The stars have closed the reading room for today";
+    limitPrimaryLabel.textContent = "Read structured version";
+    limitSecondaryLabel.textContent = "Come back tomorrow";
+  } else {
+    limitHeading.textContent = "The cosmic line is a little crowded right now";
+    limitPrimaryLabel.textContent = "Try again in 1 min";
+    limitSecondaryLabel.textContent = "View structured reading";
+  }
+
+  limitMessage.textContent = pendingRateLimit.message || "";
+  limitDialog.showModal();
 }
 
 function loadState() {
@@ -715,7 +772,6 @@ function renderReading(reading) {
   cardArtworkBackText.textContent = "";
 
   updateRevealPanel(card);
-  redrawButton.classList.remove("hidden");
   shareButton.classList.remove("hidden");
   activeTheme = "general";
   revealText(cardSummary, content?.general_reading || buildSummaryNarrative(card, orientation), 10);
@@ -758,7 +814,6 @@ async function syncUi() {
     const session = await fetchSessionState();
     const saved = saveApiState(session.today_reading, session.history);
     dateHeading.textContent = formatToday();
-    redrawButton.classList.toggle("hidden", !saved.reading);
     shareButton.classList.toggle("hidden", !saved.reading);
 
     if (saved.reading) {
@@ -777,7 +832,6 @@ async function syncUi() {
   const todayReading = state.current && state.current.date === dateKey ? state.current : null;
 
   dateHeading.textContent = formatToday();
-  redrawButton.classList.toggle("hidden", !todayReading);
   shareButton.classList.toggle("hidden", !todayReading);
 
   if (todayReading) {
@@ -838,6 +892,11 @@ async function handleDraw() {
     revealAnimation(saved.reading);
     return;
   } catch (error) {
+    if (error.status === 429 && error.payload?.fallback_reading) {
+      pendingRateLimitAction = "draw";
+      showRateLimitDialog(error.payload);
+      return;
+    }
     console.error(error);
   } finally {
     deckButton.disabled = false;
@@ -864,7 +923,6 @@ function clearAllState() {
   summaryPanel.classList.add("hidden");
   readingLayout.classList.add("hidden");
   shareButton.classList.add("hidden");
-  redrawButton.classList.add("hidden");
   tarotCard.classList.remove("is-flipped");
   cardArtwork.removeAttribute("src");
   cardArtwork.style.transform = "";
@@ -891,41 +949,6 @@ function openHistoryDialog() {
 
 function closeHistoryDialog() {
   historyDialog.close();
-}
-
-async function handleRedraw() {
-  if (deckShell.classList.contains("is-drawing")) {
-    return;
-  }
-
-  try {
-    redrawButton.disabled = true;
-    const response = await requestDraw({ redraw: true });
-    const saved = saveApiState(response.reading, response.history);
-    renderHistory(saved.history);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    window.setTimeout(() => {
-      resetDeckState();
-      revealAnimation(saved.reading);
-    }, 280);
-    return;
-  } catch (error) {
-    console.error(error);
-  } finally {
-    redrawButton.disabled = false;
-  }
-
-  const state = loadState();
-  const dateKey = todayKey();
-  const reading = { date: dateKey, ...randomDraw() };
-  state.current = reading;
-  state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
-  saveState(state);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  window.setTimeout(() => {
-    resetDeckState();
-    revealAnimation(reading);
-  }, 280);
 }
 
 function continueToReading() {
@@ -1167,6 +1190,48 @@ function confirmDownload() {
   closeExportDialog();
 }
 
+function handleLimitPrimaryAction() {
+  if (!pendingRateLimit) {
+    closeLimitDialog();
+    return;
+  }
+
+  if (pendingRateLimit.limit_type === "daily") {
+    const saved = saveFallbackReading(pendingFallbackReading);
+    if (saved?.reading) {
+      renderHistory(saved.history);
+      renderReading(saved.reading);
+    }
+    closeLimitDialog();
+    return;
+  }
+
+  const retryDelay = Math.max(60000, (pendingRateLimit.retry_after_seconds || 60) * 1000);
+  closeLimitDialog();
+  window.setTimeout(() => {
+    handleDraw();
+  }, retryDelay);
+}
+
+function handleLimitSecondaryAction() {
+  if (!pendingRateLimit) {
+    closeLimitDialog();
+    return;
+  }
+
+  if (pendingRateLimit.limit_type === "daily") {
+    closeLimitDialog();
+    return;
+  }
+
+  const saved = saveFallbackReading(pendingFallbackReading);
+  if (saved?.reading) {
+    renderHistory(saved.history);
+    renderReading(saved.reading);
+  }
+  closeLimitDialog();
+}
+
 themeTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     setThemeTab(tab.dataset.theme);
@@ -1178,7 +1243,6 @@ langVietnamese.addEventListener("click", () => setLanguage("vi"));
 deckButton.addEventListener("click", handleDraw);
 deckShell.addEventListener("click", handleDraw);
 continueButton.addEventListener("click", continueToReading);
-redrawButton.addEventListener("click", handleRedraw);
 shareButton.addEventListener("click", handleDownloadCard);
 cardFlipButton.addEventListener("click", toggleCardFlip);
 tarotCard.addEventListener("click", toggleCardFlip);
@@ -1188,6 +1252,9 @@ closeHistoryButton.addEventListener("click", closeHistoryDialog);
 closeExportButton.addEventListener("click", closeExportDialog);
 cancelExportButton.addEventListener("click", closeExportDialog);
 confirmDownloadButton.addEventListener("click", confirmDownload);
+closeLimitButton.addEventListener("click", closeLimitDialog);
+limitPrimaryButton.addEventListener("click", handleLimitPrimaryAction);
+limitSecondaryButton.addEventListener("click", handleLimitSecondaryAction);
 exportDialog.addEventListener("close", () => {
   exportPreviewImage.removeAttribute("src");
   revokeExportPreview();
