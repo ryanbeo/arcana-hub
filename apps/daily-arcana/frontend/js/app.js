@@ -1,5 +1,7 @@
 const STORAGE_KEY = "arcana-daily-reading";
 const LANGUAGE_STORAGE_KEY = "arcana-daily-language";
+const CLIENT_ID_STORAGE_KEY = "arcana-daily-client-id";
+const API_BASE_URL = (window.ARCANA_API_BASE_URL || "https://arcana-hub.onrender.com").replace(/\/$/, "");
 
 const dateHeading = document.getElementById("dateHeading");
 const langEnglish = document.getElementById("langEnglish");
@@ -16,7 +18,6 @@ const revealTags = document.getElementById("revealTags");
 const continueButton = document.getElementById("continueButton");
 const summaryViewport = document.getElementById("summaryViewport");
 const summaryPanel = document.getElementById("summaryPanel");
-const redrawButton = document.getElementById("redrawButton");
 const shareButton = document.getElementById("shareButton");
 const historyLink = document.getElementById("historyLink");
 const refreshLink = document.getElementById("refreshLink");
@@ -28,6 +29,14 @@ const closeExportButton = document.getElementById("closeExportButton");
 const cancelExportButton = document.getElementById("cancelExportButton");
 const confirmDownloadButton = document.getElementById("confirmDownloadButton");
 const exportPreviewImage = document.getElementById("exportPreviewImage");
+const limitDialog = document.getElementById("limitDialog");
+const closeLimitButton = document.getElementById("closeLimitButton");
+const limitHeading = document.getElementById("limitHeading");
+const limitMessage = document.getElementById("limitMessage");
+const limitPrimaryButton = document.getElementById("limitPrimaryButton");
+const limitPrimaryLabel = document.getElementById("limitPrimaryLabel");
+const limitSecondaryButton = document.getElementById("limitSecondaryButton");
+const limitSecondaryLabel = document.getElementById("limitSecondaryLabel");
 const readingLayout = document.getElementById("readingLayout");
 const tarotCard = document.getElementById("tarotCard");
 const cardFlipButton = document.getElementById("cardFlipButton");
@@ -135,6 +144,9 @@ const revealTextJobs = new WeakMap();
 let exportBlobUrl = "";
 let exportFileName = "arcana-daily-reading.png";
 const UI_COPY = window.APP_LOCALIZATION || { en: {}, vi: {} };
+const clientId = loadClientId();
+let pendingFallbackReading = null;
+let pendingRateLimit = null;
 
 function t(key) {
   return UI_COPY[currentLanguage][key] || UI_COPY.en[key] || key;
@@ -207,6 +219,19 @@ function loadLanguage() {
   return navigator.language && navigator.language.toLowerCase().startsWith("vi") ? "vi" : "en";
 }
 
+function loadClientId() {
+  const stored = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+  if (stored) {
+    return stored;
+  }
+
+  const generated = window.crypto?.randomUUID
+    ? window.crypto.randomUUID()
+    : `arcana-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  localStorage.setItem(CLIENT_ID_STORAGE_KEY, generated);
+  return generated;
+}
+
 function updateParallax(clientX, clientY) {
   const normalizedX = (clientX / window.innerWidth - 0.5) * 2;
   const normalizedY = (clientY / window.innerHeight - 0.5) * 2;
@@ -243,6 +268,119 @@ function randomDraw() {
     cardKey: deck[cardIndex].key,
     orientation: Math.random() < 0.5 ? "upright" : "reversed"
   };
+}
+
+function normalizeApiReading(reading) {
+  if (!reading) {
+    return null;
+  }
+
+  return {
+    id: reading.id,
+    date: reading.draw_date || reading.date,
+    drawDate: reading.draw_date || reading.date,
+    cardKey: reading.card_key || reading.cardKey,
+    orientation: reading.orientation,
+    createdAt: reading.created_at || reading.createdAt,
+    interpretation: reading.interpretation || null,
+    userContext: reading.user_context || reading.userContext || ""
+  };
+}
+
+function saveApiState(reading, history) {
+  const normalizedReading = normalizeApiReading(reading);
+  const normalizedHistory = (history || []).map(normalizeApiReading).filter(Boolean);
+  saveState({
+    current: normalizedReading,
+    history: normalizedHistory
+  });
+  return { reading: normalizedReading, history: normalizedHistory };
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: options.method || "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error || `Request failed: ${response.status}`);
+    error.payload = payload;
+    error.status = response.status;
+    throw error;
+  }
+
+  return payload;
+}
+
+async function fetchSessionState() {
+  const params = new URLSearchParams({ client_id: clientId });
+  return apiRequest(`/api/session?${params.toString()}`);
+}
+
+async function requestDraw({ redraw = false, userContext = "" } = {}) {
+  return apiRequest("/api/draw", {
+    method: "POST",
+    body: {
+      client_id: clientId,
+      redraw,
+      user_context: userContext
+    }
+  });
+}
+
+function readingContent(reading, language = currentLanguage) {
+  return reading?.interpretation?.[language] || reading?.interpretation?.en || null;
+}
+
+function closeLimitDialog() {
+  if (limitDialog.open) {
+    limitDialog.close();
+  }
+  pendingFallbackReading = null;
+  pendingRateLimit = null;
+}
+
+function saveFallbackReading(reading) {
+  const normalized = normalizeApiReading(reading);
+  if (!normalized) {
+    return null;
+  }
+
+  const state = loadState();
+  const history = [...(state.history || []).filter((item) => item.date !== normalized.date), normalized].slice(-14);
+  saveState({
+    current: normalized,
+    history
+  });
+  return { reading: normalized, history };
+}
+
+function showRateLimitDialog(ratePayload) {
+  pendingFallbackReading = ratePayload?.fallback_reading || null;
+  pendingRateLimit = ratePayload || null;
+
+  if (!pendingRateLimit) {
+    return;
+  }
+
+  if (pendingRateLimit.limit_type === "daily") {
+    limitHeading.textContent = "The stars have closed the reading room for today";
+    limitPrimaryLabel.textContent = "Read structured version";
+    limitSecondaryLabel.textContent = "Come back tomorrow";
+  } else {
+    limitHeading.textContent = "The cosmic line is a little crowded right now";
+    limitPrimaryLabel.textContent = "Try again in 1 min";
+    limitSecondaryLabel.textContent = "View structured reading";
+  }
+
+  limitMessage.textContent = pendingRateLimit.message || "";
+  limitDialog.showModal();
 }
 
 function loadState() {
@@ -406,7 +544,13 @@ function buildThemeNarrative(card, orientation, themeName) {
   return `In the ${theme.label.toLowerCase()} area, ${cardTitle} places ${keyword} right at the center of the conversation. ${themeCopy} ${orientationNote} To me, this suggests that ${sentenceCase(summary)} You should ${guidance.should}. You should not ${guidance.shouldNot}. If you stay close to this message, the theme becomes much easier to navigate with grace instead of reaction.`;
 }
 
-function buildThemeSummary(card, orientation, themeName) {
+function buildThemeSummary(card, orientation, themeName, reading = currentReading) {
+  const content = readingContent(reading);
+  const aiSummary = content?.detailed_reading?.[themeName];
+  if (aiSummary) {
+    return aiSummary;
+  }
+
   const baseCopy = readingCopy(card, orientation, themeName);
   if (currentLanguage === "vi") {
     return baseCopy;
@@ -425,8 +569,8 @@ function buildThemeSummary(card, orientation, themeName) {
   return `${intros[themeName]} ${baseCopy}`;
 }
 
-function buildExportSummary(card, orientation) {
-  return Object.keys(THEME_META).map((themeName) => buildThemeSummary(card, orientation, themeName));
+function buildExportSummary(card, orientation, reading = currentReading) {
+  return Object.keys(THEME_META).map((themeName) => buildThemeSummary(card, orientation, themeName, reading));
 }
 
 function trimSentence(text, maxLength) {
@@ -439,17 +583,18 @@ function trimSentence(text, maxLength) {
   return `${clipped.slice(0, lastSpace > 40 ? lastSpace : maxLength).trim()}.`;
 }
 
-function buildExportCopy(card, orientation) {
+function buildExportCopy(card, orientation, reading = currentReading) {
+  const content = readingContent(reading);
   const orientationLabel = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
   const cardName = localizedCardName(card);
-  const primaryKeyword = localizedPrimaryKeyword(card);
-  const keywords = localizedKeywords(card);
+  const primaryKeyword = content?.keywords?.main || localizedPrimaryKeyword(card);
+  const keywords = (content?.keywords?.supporting || localizedKeywords(card)).filter(Boolean);
   const readingDate = formatToday();
   const intro =
     currentLanguage === "vi"
-      ? trimSentence(`${cardName} đưa ${primaryKeyword.toLowerCase()} vào trọng tâm thông qua ${keywords[0].toLowerCase()} và ${keywords[1].toLowerCase()}.`, 120)
+      ? trimSentence(`${cardName} đưa ${primaryKeyword.toLowerCase()} vào trọng tâm thông qua ${(keywords[0] || primaryKeyword).toLowerCase()} và ${(keywords[1] || primaryKeyword).toLowerCase()}.`, 120)
       : trimSentence(
-          `${cardName} brings ${primaryKeyword.toLowerCase()} into focus through ${keywords[0].toLowerCase()} and ${keywords[1].toLowerCase()}.`,
+          `${cardName} brings ${primaryKeyword.toLowerCase()} into focus through ${(keywords[0] || primaryKeyword).toLowerCase()} and ${(keywords[1] || primaryKeyword).toLowerCase()}.`,
           110
         );
   return {
@@ -458,11 +603,11 @@ function buildExportCopy(card, orientation) {
     intro,
     keywordLabel: primaryKeyword,
     keywordSupport: trimSentence(`${t("supportKeywords")}: ${keywords.join(", ")}.`, 120),
-    general: trimSentence(buildThemeSummary(card, orientation, "general"), 118),
-    work: trimSentence(buildThemeSummary(card, orientation, "work"), 118),
-    relationship: trimSentence(buildThemeSummary(card, orientation, "relationship"), 118),
-    money: trimSentence(buildThemeSummary(card, orientation, "money"), 118),
-    mind: trimSentence(buildThemeSummary(card, orientation, "mind"), 132)
+    general: trimSentence(buildThemeSummary(card, orientation, "general", reading), 118),
+    work: trimSentence(buildThemeSummary(card, orientation, "work", reading), 118),
+    relationship: trimSentence(buildThemeSummary(card, orientation, "relationship", reading), 118),
+    money: trimSentence(buildThemeSummary(card, orientation, "money", reading), 118),
+    mind: trimSentence(buildThemeSummary(card, orientation, "mind", reading), 132)
   };
 }
 
@@ -518,7 +663,9 @@ function setThemeTab(themeName) {
   if (currentReading) {
     const card = lookupCard(currentReading.cardKey);
     if (card) {
-      themeReading.textContent = buildThemeNarrative(card, currentReading.orientation, themeName);
+      const content = readingContent(currentReading);
+      themeReading.textContent =
+        content?.detailed_reading?.[themeName] || buildThemeNarrative(card, currentReading.orientation, themeName);
     }
   } else {
     themeReading.textContent = "";
@@ -594,6 +741,7 @@ function renderReading(reading) {
   }
 
   currentReading = reading;
+  const content = readingContent(reading);
   const orientation = reading.orientation;
   const fallback = createArtworkUri(card, orientation);
   const source = artworkSource(card, orientation);
@@ -619,16 +767,15 @@ function renderReading(reading) {
   cardName.textContent = localizedCardName(card);
   cardOrientation.textContent = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
   cardSummary.textContent = "";
-  primaryKeyword.textContent = localizedPrimaryKeyword(card);
-  keywordSupport.textContent = `${t("supportKeywords")}: ${localizedKeywords(card).join(", ")}`;
+  primaryKeyword.textContent = content?.keywords?.main || localizedPrimaryKeyword(card);
+  keywordSupport.textContent = `${t("supportKeywords")}: ${(content?.keywords?.supporting || localizedKeywords(card)).filter(Boolean).join(", ")}`;
   cardArtworkBackText.textContent = "";
 
   updateRevealPanel(card);
-  redrawButton.classList.remove("hidden");
   shareButton.classList.remove("hidden");
   activeTheme = "general";
-  revealText(cardSummary, buildSummaryNarrative(card, orientation), 10);
-  cardArtworkBackText.textContent = buildArtworkNarrative(card);
+  revealText(cardSummary, content?.general_reading || buildSummaryNarrative(card, orientation), 10);
+  cardArtworkBackText.textContent = content?.artwork_readthrough || buildArtworkNarrative(card);
   setThemeTab(activeTheme);
 }
 
@@ -640,6 +787,7 @@ function renderHistory(history) {
         .reverse()
         .map((entry) => {
           const card = lookupCard(entry.cardKey);
+          const content = readingContent(entry);
           if (!card) {
             return "";
           }
@@ -651,7 +799,7 @@ function renderHistory(history) {
                 <span class="status-badge muted">${entry.orientation === "reversed" ? t("orientationReversed") : t("orientationUpright")}</span>
               </div>
               <h3>${localizedCardName(card)}</h3>
-              <p>${localizedSummary(card, entry.orientation)}</p>
+              <p>${content?.general_reading || localizedSummary(card, entry.orientation)}</p>
             </article>
           `;
         })
@@ -661,13 +809,29 @@ function renderHistory(history) {
   historyDialogList.innerHTML = markup;
 }
 
-function syncUi() {
+async function syncUi() {
+  try {
+    const session = await fetchSessionState();
+    const saved = saveApiState(session.today_reading, session.history);
+    dateHeading.textContent = formatToday();
+    shareButton.classList.toggle("hidden", !saved.reading);
+
+    if (saved.reading) {
+      renderReading(saved.reading);
+      deckButton.classList.add("hidden");
+    }
+
+    renderHistory(saved.history);
+    return;
+  } catch (error) {
+    console.warn("Falling back to local tarot state.", error);
+  }
+
   const state = loadState();
   const dateKey = todayKey();
   const todayReading = state.current && state.current.date === dateKey ? state.current : null;
 
   dateHeading.textContent = formatToday();
-  redrawButton.classList.toggle("hidden", !todayReading);
   shareButton.classList.toggle("hidden", !todayReading);
 
   if (todayReading) {
@@ -706,7 +870,7 @@ function revealAnimation(reading) {
   }, 1280);
 }
 
-function handleDraw() {
+async function handleDraw() {
   if (deckShell.classList.contains("is-drawing")) {
     return;
   }
@@ -720,11 +884,25 @@ function handleDraw() {
     return;
   }
 
-  const reading = {
-    date: dateKey,
-    ...randomDraw()
-  };
+  try {
+    deckButton.disabled = true;
+    const response = await requestDraw();
+    const saved = saveApiState(response.reading, response.history);
+    renderHistory(saved.history);
+    revealAnimation(saved.reading);
+    return;
+  } catch (error) {
+    if (error.status === 429 && error.payload?.fallback_reading) {
+      pendingRateLimitAction = "draw";
+      showRateLimitDialog(error.payload);
+      return;
+    }
+    console.error(error);
+  } finally {
+    deckButton.disabled = false;
+  }
 
+  const reading = { date: dateKey, ...randomDraw() };
   state.current = reading;
   state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
   saveState(state);
@@ -745,7 +923,6 @@ function clearAllState() {
   summaryPanel.classList.add("hidden");
   readingLayout.classList.add("hidden");
   shareButton.classList.add("hidden");
-  redrawButton.classList.add("hidden");
   tarotCard.classList.remove("is-flipped");
   cardArtwork.removeAttribute("src");
   cardArtwork.style.transform = "";
@@ -772,28 +949,6 @@ function openHistoryDialog() {
 
 function closeHistoryDialog() {
   historyDialog.close();
-}
-
-function handleRedraw() {
-  if (deckShell.classList.contains("is-drawing")) {
-    return;
-  }
-
-  const state = loadState();
-  const dateKey = todayKey();
-  const reading = {
-    date: dateKey,
-    ...randomDraw()
-  };
-
-  state.current = reading;
-  state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
-  saveState(state);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  window.setTimeout(() => {
-    resetDeckState();
-    revealAnimation(reading);
-  }, 280);
 }
 
 function continueToReading() {
@@ -858,7 +1013,7 @@ async function buildShareCanvas(reading) {
   const context = canvas.getContext("2d");
   const localizedName = localizedCardName(card);
   const localizedArcana = localizedArcanaLabel(card);
-  const exportCopy = buildExportCopy(card, orientation);
+  const exportCopy = buildExportCopy(card, orientation, reading);
   if (document.fonts && document.fonts.ready) {
     await document.fonts.ready;
   }
@@ -1035,6 +1190,48 @@ function confirmDownload() {
   closeExportDialog();
 }
 
+function handleLimitPrimaryAction() {
+  if (!pendingRateLimit) {
+    closeLimitDialog();
+    return;
+  }
+
+  if (pendingRateLimit.limit_type === "daily") {
+    const saved = saveFallbackReading(pendingFallbackReading);
+    if (saved?.reading) {
+      renderHistory(saved.history);
+      renderReading(saved.reading);
+    }
+    closeLimitDialog();
+    return;
+  }
+
+  const retryDelay = Math.max(60000, (pendingRateLimit.retry_after_seconds || 60) * 1000);
+  closeLimitDialog();
+  window.setTimeout(() => {
+    handleDraw();
+  }, retryDelay);
+}
+
+function handleLimitSecondaryAction() {
+  if (!pendingRateLimit) {
+    closeLimitDialog();
+    return;
+  }
+
+  if (pendingRateLimit.limit_type === "daily") {
+    closeLimitDialog();
+    return;
+  }
+
+  const saved = saveFallbackReading(pendingFallbackReading);
+  if (saved?.reading) {
+    renderHistory(saved.history);
+    renderReading(saved.reading);
+  }
+  closeLimitDialog();
+}
+
 themeTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     setThemeTab(tab.dataset.theme);
@@ -1046,7 +1243,6 @@ langVietnamese.addEventListener("click", () => setLanguage("vi"));
 deckButton.addEventListener("click", handleDraw);
 deckShell.addEventListener("click", handleDraw);
 continueButton.addEventListener("click", continueToReading);
-redrawButton.addEventListener("click", handleRedraw);
 shareButton.addEventListener("click", handleDownloadCard);
 cardFlipButton.addEventListener("click", toggleCardFlip);
 tarotCard.addEventListener("click", toggleCardFlip);
@@ -1056,6 +1252,9 @@ closeHistoryButton.addEventListener("click", closeHistoryDialog);
 closeExportButton.addEventListener("click", closeExportDialog);
 cancelExportButton.addEventListener("click", closeExportDialog);
 confirmDownloadButton.addEventListener("click", confirmDownload);
+closeLimitButton.addEventListener("click", closeLimitDialog);
+limitPrimaryButton.addEventListener("click", handleLimitPrimaryAction);
+limitSecondaryButton.addEventListener("click", handleLimitSecondaryAction);
 exportDialog.addEventListener("close", () => {
   exportPreviewImage.removeAttribute("src");
   revokeExportPreview();
