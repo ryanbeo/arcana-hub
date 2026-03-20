@@ -8,8 +8,14 @@ const dateHeading = document.getElementById("dateHeading");
 const langEnglish = document.getElementById("langEnglish");
 const langVietnamese = document.getElementById("langVietnamese");
 const languageSwitcher = document.getElementById("languageSwitcher");
+const drawStage = document.querySelector(".draw-stage");
 const deckButton = document.getElementById("deckButton");
 const deckShell = document.getElementById("deckShell");
+const deckOracle = document.getElementById("deckOracle");
+const deckOrbitField = document.getElementById("deckOrbitField");
+const selectionControls = document.getElementById("selectionControls");
+const revealSelectionButton = document.getElementById("revealSelectionButton");
+const cancelSelectionButton = document.getElementById("cancelSelectionButton");
 const parallaxLayers = document.querySelectorAll("[data-parallax-layer]");
 const heroPulledCard = document.getElementById("heroPulledCard");
 const heroCardArtwork = document.getElementById("heroCardArtwork");
@@ -74,6 +80,7 @@ const THEME_ICON_CLASS = {
   work: "ph ph-briefcase",
   relationship: "ph ph-heart",
   money: "ph ph-coins",
+  body: "ph ph-person-simple",
   mind: "ph ph-moon-stars"
 };
 
@@ -106,6 +113,13 @@ const THEME_META = {
     intro: "How to handle resources and practical choices",
     introVi: "Cách xử lý tiền bạc và những lựa chọn thực tế"
   },
+  body: {
+    label: "Body",
+    labelVi: "Cơ thể",
+    icon: "✦",
+    intro: "How this message moves through your body and energy",
+    introVi: "Thông điệp này đang đi qua cơ thể và năng lượng của bạn ra sao"
+  },
   mind: {
     label: "Mind",
     labelVi: "Tâm trí",
@@ -132,11 +146,25 @@ const NARRATIVE_GUIDANCE = {
     should: "stay grounded, make practical choices, and let your decisions come from clarity rather than urgency",
     shouldNot: "spend, save, or commit from fear alone, because anxiety is not the same thing as wisdom"
   },
+  body: {
+    should: "listen to your energy honestly, support your body with simple care, and treat physical signals like useful information",
+    shouldNot: "override fatigue, ignore tension, or treat your body like an obstacle you need to outwork"
+  },
   mind: {
     should: "slow the pace of your thoughts, make space to breathe, and choose the story that supports your peace rather than your fear",
     shouldNot: "feed spirals, rehearse worst-case scenarios, or mistake mental noise for truth"
   }
 };
+
+const ORBIT_LAYOUT = [{ count: 78, speed: 0.00011, direction: 1 }];
+const ORBIT_SPREAD_DURATION = 960;
+const ORBIT_SELECTION_DURATION = 520;
+const ORBIT_RETURN_DURATION = 360;
+const ORBIT_DISPERSAL_DURATION = 720;
+const ORBIT_SELECTED_SCALE = 1;
+const ORBIT_VISIBLE_ARC = 1.16;
+const ORBIT_PUSH_DOWN_RATIO = 0.15;
+const ORBIT_SELECTED_RISE_RATIO = 0.2;
 
 let activeTheme = "general";
 let currentReading = null;
@@ -148,6 +176,7 @@ const UI_COPY = window.APP_LOCALIZATION || { en: {}, vi: {} };
 const clientId = loadClientId();
 let pendingFallbackReading = null;
 let pendingRateLimit = null;
+let deckInteraction = createDeckInteractionState();
 
 function t(key) {
   return UI_COPY[currentLanguage][key] || UI_COPY.en[key] || key;
@@ -161,17 +190,88 @@ function themeIntroLabel(themeName) {
   return t(`theme${themeName.charAt(0).toUpperCase()}${themeName.slice(1)}Intro`);
 }
 
+function createDeckInteractionState() {
+  return {
+    phase: "idle",
+    cards: [],
+    ringAngles: ORBIT_LAYOUT.map(() => Math.random() * Math.PI * 2),
+    frameId: 0,
+    lastTimestamp: 0,
+    spreadStart: 0,
+    selectedCard: null,
+    metrics: {
+      width: 0,
+      height: 0,
+      baseRadius: 0,
+      orbitRadius: 0,
+      orbitHubY: 0
+    }
+  };
+}
+
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function mix(start, end, progress) {
+  return start + (end - start) * progress;
+}
+
+function normalizeAngle(angle) {
+  const fullTurn = Math.PI * 2;
+  let normalized = angle % fullTurn;
+
+  if (normalized > Math.PI) {
+    normalized -= fullTurn;
+  }
+
+  if (normalized < -Math.PI) {
+    normalized += fullTurn;
+  }
+
+  return normalized;
+}
+
+function easeOutQuint(value) {
+  return 1 - Math.pow(1 - value, 5);
+}
+
+function easeInOutCubic(value) {
+  return value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
+}
+
+function shuffleItems(items) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function cardLocaleEntry(card) {
-  return (
-    window.TAROT_IMPORTED_CARD_CONTENT?.[currentLanguage]?.cards?.[card.key] ||
-    window.TAROT_CARD_LOCALIZATION?.[currentLanguage]?.cards?.[card.key] ||
-    null
-  );
+  return window.TAROT_IMPORTED_CARD_CONTENT?.[currentLanguage]?.cards?.[card.key] || null;
 }
 
 function localizedCardValue(card, key) {
   const localeEntry = cardLocaleEntry(card);
-  return localeEntry && localeEntry[key] !== undefined ? localeEntry[key] : card[key];
+  if (!localeEntry || localeEntry[key] === undefined) {
+    return key === "keywords" ? [] : "";
+  }
+
+  return localeEntry[key];
 }
 
 function localizedCardName(card) {
@@ -195,13 +295,15 @@ function localizedArtwork(card) {
 }
 
 function localizedSummary(card, orientation) {
-  const localized = cardLocaleEntry(card)?.summary?.[orientation];
-  return localized || card.summary[orientation];
+  return cardLocaleEntry(card)?.summary?.[orientation] || "";
 }
 
 function localizedThemeCopy(card, orientation, themeName) {
-  const localized = cardLocaleEntry(card)?.themes?.[themeName]?.[orientation];
-  return localized || card.themes[themeName][orientation];
+  return cardLocaleEntry(card)?.themes?.[themeName]?.[orientation] || "";
+}
+
+function normalizeCardKey(cardKey) {
+  return String(cardKey || "").replace(/^\d+-/, "");
 }
 
 function applyLocalizedElements() {
@@ -280,7 +382,7 @@ function normalizeApiReading(reading) {
     id: reading.id,
     date: reading.draw_date || reading.date,
     drawDate: reading.draw_date || reading.date,
-    cardKey: reading.card_key || reading.cardKey,
+    cardKey: normalizeCardKey(reading.card_key || reading.cardKey),
     orientation: reading.orientation,
     createdAt: reading.created_at || reading.createdAt,
     interpretation: reading.interpretation || null,
@@ -324,13 +426,15 @@ async function fetchSessionState() {
   return apiRequest(`/api/session?${params.toString()}`);
 }
 
-async function requestDraw({ redraw = false, userContext = "" } = {}) {
+async function requestDraw({ redraw = false, userContext = "", selectedCardKey = "", selectedOrientation = "" } = {}) {
   return apiRequest("/api/draw", {
     method: "POST",
     body: {
       client_id: clientId,
       redraw,
-      user_context: userContext
+      user_context: userContext,
+      selected_card_key: selectedCardKey || undefined,
+      selected_orientation: selectedOrientation || undefined
     }
   });
 }
@@ -353,6 +457,33 @@ function saveFallbackReading(reading) {
     return null;
   }
 
+  const state = loadState();
+  const history = [...(state.history || []).filter((item) => item.date !== normalized.date), normalized].slice(-14);
+  saveState({
+    current: normalized,
+    history
+  });
+  return { reading: normalized, history };
+}
+
+function buildSelectedReading(entry, drawDate = todayKey()) {
+  return {
+    date: drawDate,
+    drawDate,
+    cardKey: entry.card.key,
+    orientation: entry.orientation
+  };
+}
+
+function saveLocalReading(reading) {
+  if (!reading) {
+    return null;
+  }
+
+  const normalized = {
+    ...reading,
+    drawDate: reading.drawDate || reading.date
+  };
   const state = loadState();
   const history = [...(state.history || []).filter((item) => item.date !== normalized.date), normalized].slice(-14);
   saveState({
@@ -397,7 +528,8 @@ function saveState(state) {
 }
 
 function lookupCard(cardKey) {
-  return window.TAROT_DATABASE.byKey[cardKey] || null;
+  const normalizedKey = normalizeCardKey(cardKey);
+  return window.TAROT_DATABASE.byKey[normalizedKey] || null;
 }
 
 function createArtworkUri(card, orientation) {
@@ -436,8 +568,513 @@ function artworkSource(card, orientation) {
   return createArtworkUri(card, orientation);
 }
 
-function readingCopy(card, orientation, themeName) {
-  return localizedThemeCopy(card, orientation, themeName);
+function setDeckShellHidden(hidden) {
+  deckShell.classList.toggle("is-hidden", hidden);
+}
+
+function updateDeckInteractionMetrics() {
+  const width = deckOracle.clientWidth || drawStage?.clientWidth || 0;
+  const height = deckOracle.clientHeight || drawStage?.clientHeight || 0;
+  const shellWidth = deckShell.getBoundingClientRect().width || 300;
+  const baseRadius = Math.min(width, height) * (window.innerWidth < 760 ? 0.43 : 0.46);
+  const orbitRadius = clampValue(
+    Math.min(width * (window.innerWidth < 760 ? 0.84 : 0.68), height * (window.innerWidth < 760 ? 0.96 : 0.9)),
+    window.innerWidth < 760 ? 340 : 560,
+    window.innerWidth < 760 ? 520 : 860
+  );
+  const orbitHubY = orbitRadius - height * (window.innerWidth < 760 ? 0.28 : 0.18);
+  const cardWidth = shellWidth;
+
+  deckInteraction.metrics = {
+    width,
+    height,
+    baseRadius,
+    orbitRadius,
+    orbitHubY
+  };
+
+  deckInteraction.cards.forEach((entry) => {
+    entry.element.style.setProperty("--orbit-card-width", `${cardWidth}px`);
+  });
+}
+
+function selectedCardTargetY() {
+  const oracleBounds = deckOracle.getBoundingClientRect();
+  const oracleCenterY = oracleBounds.top + oracleBounds.height / 2;
+  return window.innerHeight / 2 - oracleCenterY;
+}
+
+function selectedCardTargetX() {
+  const oracleBounds = deckOracle.getBoundingClientRect();
+  const oracleCenterX = oracleBounds.left + oracleBounds.width / 2;
+  return window.innerWidth / 2 - oracleCenterX;
+}
+
+function revealedCardTargetX() {
+  return selectedCardTargetX();
+}
+
+function revealedCardTargetY() {
+  return -(deckInteraction.metrics.height || 0) * 0.14;
+}
+
+function animateOrbitSpreadOffset(offsetY = 0, duration = ORBIT_SELECTION_DURATION, easing = easeOutQuint) {
+  const selectedEntry = deckInteraction.selectedCard;
+
+  deckInteraction.cards.forEach((entry) => {
+    if (entry === selectedEntry) {
+      return;
+    }
+
+    createOrbitCardAnimation(
+      entry,
+      {
+        x: entry.frozenX,
+        y: entry.frozenY + offsetY,
+        rotation: entry.frozenRotation,
+        scale: entry.frozenScale,
+        opacity: entry.frozenOpacity,
+        zIndex: entry.frozenZIndex
+      },
+      duration,
+      easing
+    );
+  });
+}
+
+function orbitPushDownOffset() {
+  return (deckInteraction.metrics.height || 0) * ORBIT_PUSH_DOWN_RATIO;
+}
+
+function resetDeckInteractionState() {
+  if (deckInteraction.frameId) {
+    window.cancelAnimationFrame(deckInteraction.frameId);
+  }
+
+  deckInteraction = createDeckInteractionState();
+  deckOrbitField.innerHTML = "";
+  deckOracle.classList.add("hidden");
+  deckOracle.classList.remove("has-selection", "is-loading");
+  selectionControls.classList.add("hidden");
+  revealSelectionButton.disabled = false;
+  cancelSelectionButton.disabled = false;
+}
+
+function buildOrbitCardEntry(card, ringIndex, slotIndex, count) {
+  const element = document.createElement("button");
+  element.className = "orbit-card";
+  element.type = "button";
+  element.setAttribute("aria-label", t("selectCardAria"));
+  element.innerHTML = `
+    <span class="orbit-card-inner">
+      <span class="orbit-card-face orbit-card-back"></span>
+      <span class="orbit-card-face orbit-card-front">
+        <img alt="" />
+      </span>
+    </span>
+  `;
+
+  const entry = {
+    element,
+    frontImage: element.querySelector("img"),
+    card,
+    orientation: Math.random() < 0.5 ? "upright" : "reversed",
+    ringIndex,
+    slotIndex,
+    baseAngle: (Math.PI * 2 * slotIndex) / count,
+    tilt: 0,
+    depthBias: 0,
+    animation: null,
+    x: 0,
+    y: 0,
+    rotation: 0,
+    scale: 1,
+    opacity: 0,
+    zIndex: 0,
+    frozenX: 0,
+    frozenY: 0,
+    frozenRotation: 0,
+    frozenScale: 1,
+    frozenOpacity: 1,
+    frozenZIndex: 0
+  };
+
+  element.addEventListener("click", () => {
+    handleOrbitCardSelection(entry);
+  });
+
+  return entry;
+}
+
+function buildDeckOrbit() {
+  const shuffledDeck = shuffleItems(window.TAROT_DATABASE.cards);
+  const count = shuffledDeck.length;
+
+  shuffledDeck.forEach((card, slotIndex) => {
+    const entry = buildOrbitCardEntry(card, 0, slotIndex, count);
+    deckInteraction.cards.push(entry);
+    deckOrbitField.appendChild(entry.element);
+  });
+
+  updateDeckInteractionMetrics();
+}
+
+function computeOrbitTarget(entry, spreadProgress = 1) {
+  const angle = normalizeAngle(entry.baseAngle + deckInteraction.ringAngles[0]);
+  const finalX = Math.sin(angle) * deckInteraction.metrics.orbitRadius;
+  const finalY = deckInteraction.metrics.orbitHubY - Math.cos(angle) * deckInteraction.metrics.orbitRadius;
+  const x = finalX * spreadProgress;
+  const y = finalY * spreadProgress;
+  const scale = 1;
+  const rotation = angle * (180 / Math.PI);
+  const visibility = clampValue((ORBIT_VISIBLE_ARC - Math.abs(angle)) / 0.36, 0, 1);
+  const opacity = easeOutQuint(visibility) * spreadProgress;
+  const zIndex = 1000 + Math.round((x + deckInteraction.metrics.orbitRadius) * 10);
+
+  return {
+    x,
+    y,
+    rotation,
+    scale,
+    opacity,
+    zIndex
+  };
+}
+
+function applyOrbitCardTransform(entry, props) {
+  entry.x = props.x;
+  entry.y = props.y;
+  entry.rotation = props.rotation;
+  entry.scale = props.scale;
+  entry.opacity = props.opacity;
+  entry.zIndex = props.zIndex;
+
+  entry.element.style.transform = `translate(-50%, -50%) translate3d(${props.x}px, ${props.y}px, 0) rotate(${props.rotation}deg) scale(${props.scale})`;
+  entry.element.style.opacity = String(props.opacity);
+  entry.element.style.zIndex = String(props.zIndex);
+  entry.element.style.pointerEvents = props.opacity > 0.08 ? "auto" : "none";
+}
+
+function createOrbitCardAnimation(entry, to, duration, easing = easeOutQuint, onComplete) {
+  entry.animation = {
+    from: {
+      x: entry.x,
+      y: entry.y,
+      rotation: entry.rotation,
+      scale: entry.scale,
+      opacity: entry.opacity,
+      zIndex: entry.zIndex
+    },
+    to,
+    duration,
+    easing,
+    start: performance.now(),
+    onComplete
+  };
+}
+
+function advanceOrbitCardAnimation(entry, timestamp) {
+  const animation = entry.animation;
+  const progress = clampValue((timestamp - animation.start) / animation.duration, 0, 1);
+  const eased = animation.easing(progress);
+  const current = {
+    x: mix(animation.from.x, animation.to.x, eased),
+    y: mix(animation.from.y, animation.to.y, eased),
+    rotation: mix(animation.from.rotation, animation.to.rotation, eased),
+    scale: mix(animation.from.scale, animation.to.scale, eased),
+    opacity: mix(animation.from.opacity, animation.to.opacity, eased),
+    zIndex: Math.round(mix(animation.from.zIndex, animation.to.zIndex, eased))
+  };
+
+  applyOrbitCardTransform(entry, current);
+
+  if (progress >= 1) {
+    entry.animation = null;
+    if (typeof animation.onComplete === "function") {
+      animation.onComplete();
+    }
+  }
+}
+
+function freezeOrbitCards() {
+  deckInteraction.cards.forEach((entry) => {
+    entry.frozenX = entry.x;
+    entry.frozenY = entry.y;
+    entry.frozenRotation = entry.rotation;
+    entry.frozenScale = entry.scale;
+    entry.frozenOpacity = entry.opacity;
+    entry.frozenZIndex = entry.zIndex;
+  });
+}
+
+function orbitIdlePosition(entry) {
+  if (entry === deckInteraction.selectedCard && ["selected", "revealing"].includes(deckInteraction.phase)) {
+    return {
+      x: selectedCardTargetX(),
+      y: selectedCardTargetY(),
+      rotation: 0,
+      scale: ORBIT_SELECTED_SCALE,
+      opacity: 1,
+      zIndex: 10000
+    };
+  }
+
+  if (entry === deckInteraction.selectedCard && ["revealed", "dispersing"].includes(deckInteraction.phase)) {
+    return {
+      x: revealedCardTargetX(),
+      y: revealedCardTargetY(),
+      rotation: 0,
+      scale: ORBIT_SELECTED_SCALE,
+      opacity: 1,
+      zIndex: 10000
+    };
+  }
+
+  if (deckInteraction.selectedCard && ["selected", "revealing"].includes(deckInteraction.phase)) {
+    return {
+      x: entry.frozenX,
+      y: entry.frozenY + orbitPushDownOffset(),
+      rotation: entry.frozenRotation,
+      scale: entry.frozenScale,
+      opacity: entry.frozenOpacity,
+      zIndex: entry.frozenZIndex
+    };
+  }
+
+  return {
+    x: entry.frozenX,
+    y: entry.frozenY,
+    rotation: entry.frozenRotation,
+    scale: entry.frozenScale,
+    opacity: entry.frozenOpacity,
+    zIndex: entry.frozenZIndex
+  };
+}
+
+function runDeckInteractionFrame(timestamp) {
+  if (!deckInteraction.lastTimestamp) {
+    deckInteraction.lastTimestamp = timestamp;
+  }
+
+  const delta = Math.min(32, timestamp - deckInteraction.lastTimestamp);
+  deckInteraction.lastTimestamp = timestamp;
+
+  if (deckInteraction.phase === "spreading" || deckInteraction.phase === "spinning") {
+    ORBIT_LAYOUT.forEach((ring, index) => {
+      deckInteraction.ringAngles[index] += delta * ring.speed * ring.direction;
+    });
+  }
+
+  let spreadProgress = 1;
+  if (deckInteraction.phase === "spreading") {
+    spreadProgress = easeOutQuint(clampValue((timestamp - deckInteraction.spreadStart) / ORBIT_SPREAD_DURATION, 0, 1));
+    if (spreadProgress >= 1) {
+      deckInteraction.phase = "spinning";
+    }
+  }
+
+  deckInteraction.cards.forEach((entry) => {
+    if (entry.animation) {
+      advanceOrbitCardAnimation(entry, timestamp);
+      return;
+    }
+
+    if (deckInteraction.phase === "spreading" || deckInteraction.phase === "spinning") {
+      applyOrbitCardTransform(entry, computeOrbitTarget(entry, spreadProgress));
+      return;
+    }
+
+    applyOrbitCardTransform(entry, orbitIdlePosition(entry));
+  });
+
+  deckInteraction.frameId = window.requestAnimationFrame(runDeckInteractionFrame);
+}
+
+function beginDeckSelection() {
+  resetDeckInteractionState();
+  setDeckShellHidden(true);
+  deckButton.classList.add("hidden");
+  revealPanel.classList.add("hidden");
+  deckOracle.classList.remove("hidden");
+  buildDeckOrbit();
+  deckInteraction.phase = "spreading";
+  deckInteraction.spreadStart = performance.now();
+  deckInteraction.lastTimestamp = 0;
+  deckInteraction.frameId = window.requestAnimationFrame(runDeckInteractionFrame);
+}
+
+function handleOrbitCardSelection(entry) {
+  if (deckInteraction.phase !== "spinning") {
+    return;
+  }
+
+  deckInteraction.phase = "selecting";
+  deckInteraction.selectedCard = entry;
+  freezeOrbitCards();
+  deckOracle.classList.add("has-selection");
+  deckInteraction.cards.forEach((cardEntry) => {
+    cardEntry.element.classList.toggle("is-muted", cardEntry !== entry);
+  });
+  animateOrbitSpreadOffset(orbitPushDownOffset(), ORBIT_SELECTION_DURATION, easeOutQuint);
+  entry.element.classList.add("is-selected");
+  createOrbitCardAnimation(
+    entry,
+    {
+      x: selectedCardTargetX(),
+      y: selectedCardTargetY(),
+      rotation: 0,
+      scale: ORBIT_SELECTED_SCALE,
+      opacity: 1,
+      zIndex: 10000
+    },
+    ORBIT_SELECTION_DURATION,
+    easeOutQuint,
+    () => {
+      deckInteraction.phase = "selected";
+      selectionControls.classList.remove("hidden");
+    }
+  );
+}
+
+function cancelSelectedCardSelection() {
+  if (deckInteraction.phase !== "selected" || !deckInteraction.selectedCard) {
+    return;
+  }
+
+  const entry = deckInteraction.selectedCard;
+  selectionControls.classList.add("hidden");
+  deckInteraction.phase = "returning";
+  animateOrbitSpreadOffset(0, ORBIT_RETURN_DURATION, easeInOutCubic);
+  createOrbitCardAnimation(
+    entry,
+    {
+      x: entry.frozenX,
+      y: entry.frozenY,
+      rotation: entry.frozenRotation,
+      scale: entry.frozenScale,
+      opacity: 1,
+      zIndex: entry.frozenZIndex
+    },
+    ORBIT_RETURN_DURATION,
+    easeInOutCubic,
+    () => {
+      entry.element.classList.remove("is-selected", "is-flipped", "is-revealed");
+      deckInteraction.cards.forEach((cardEntry) => {
+        cardEntry.element.classList.remove("is-muted", "is-dispersing");
+      });
+      deckInteraction.selectedCard = null;
+      deckInteraction.phase = "spinning";
+      deckOracle.classList.remove("has-selection");
+    }
+  );
+}
+
+function prepareOrbitCardArtwork(entry) {
+  const fallback = createArtworkUri(entry.card, entry.orientation);
+  attachFallback(entry.frontImage);
+  entry.frontImage.dataset.fallback = fallback;
+  entry.frontImage.src = artworkSource(entry.card, entry.orientation);
+  entry.frontImage.alt = `${entry.card.name} tarot card artwork`;
+  entry.frontImage.style.transform = entry.orientation === "reversed" ? "rotate(180deg)" : "none";
+}
+
+function disperseUnselectedOrbitCards(selectedEntry) {
+  deckInteraction.phase = "dispersing";
+  deckInteraction.cards.forEach((entry, index) => {
+    if (entry === selectedEntry) {
+      entry.element.classList.add("is-revealed");
+      return;
+    }
+
+    entry.element.classList.add("is-dispersing");
+    const directionX = entry.frozenX === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(entry.frozenX);
+    const directionY = entry.frozenY === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(entry.frozenY);
+    const target = {
+      x: entry.frozenX * randomBetween(1.8, 2.45) + directionX * randomBetween(180, 320),
+      y: entry.frozenY * randomBetween(1.6, 2.2) + directionY * randomBetween(120, 240),
+      rotation: entry.frozenRotation + randomBetween(-46, 46),
+      scale: 1,
+      opacity: 0,
+      zIndex: 10
+    };
+    const delay = (index % 9) * 22;
+
+    window.setTimeout(() => {
+      createOrbitCardAnimation(entry, target, ORBIT_DISPERSAL_DURATION, easeOutQuint);
+    }, delay);
+  });
+}
+
+async function resolveSelectedReading(entry) {
+  const selectedReading = buildSelectedReading(entry);
+
+  if (FRONTEND_ONLY_MODE) {
+    return saveLocalReading(selectedReading);
+  }
+
+  try {
+    const response = await requestDraw({
+      selectedCardKey: entry.card.key,
+      selectedOrientation: entry.orientation
+    });
+    return saveApiState(response.reading, response.history);
+  } catch (error) {
+    if (error.status === 429 && error.payload?.fallback_reading) {
+      return { rateLimit: error.payload };
+    }
+
+    console.warn("Falling back to a local selected reading.", error);
+    return saveLocalReading(selectedReading);
+  }
+}
+
+async function revealSelectedCard() {
+  if (deckInteraction.phase !== "selected" || !deckInteraction.selectedCard) {
+    return;
+  }
+
+  const selectedEntry = deckInteraction.selectedCard;
+  selectionControls.classList.add("hidden");
+  revealSelectionButton.disabled = true;
+  cancelSelectionButton.disabled = true;
+  deckInteraction.phase = "revealing";
+  deckOracle.classList.add("is-loading");
+  prepareOrbitCardArtwork(selectedEntry);
+  selectedEntry.element.classList.add("is-flipped", "is-revealed");
+  await wait(220);
+  const outcome = await resolveSelectedReading(selectedEntry);
+  createOrbitCardAnimation(
+    selectedEntry,
+    {
+      x: revealedCardTargetX(),
+      y: revealedCardTargetY(),
+      rotation: 0,
+      scale: ORBIT_SELECTED_SCALE,
+      opacity: 1,
+      zIndex: 10000
+    },
+    ORBIT_SELECTION_DURATION,
+    easeOutQuint
+  );
+  animateOrbitSpreadOffset(0, ORBIT_SELECTION_DURATION, easeOutQuint);
+  await wait(ORBIT_SELECTION_DURATION + 80);
+  deckOracle.classList.remove("is-loading");
+
+  if (outcome?.rateLimit) {
+    resetDeckInteractionState();
+    setDeckShellHidden(false);
+    deckButton.classList.remove("hidden");
+    showRateLimitDialog(outcome.rateLimit);
+    return;
+  }
+
+  currentReading = outcome.reading;
+  deckInteraction.phase = "revealed";
+  renderHistory(outcome.history || []);
+  const revealedCard = lookupCard(outcome.reading.cardKey);
+  if (revealedCard) {
+    updateRevealPanel(revealedCard);
+  }
 }
 
 function joinKeywords(keywords) {
@@ -452,122 +1089,9 @@ function joinKeywords(keywords) {
   return `${keywords.slice(0, -1).join(", ")}, and ${keywords[keywords.length - 1]}`;
 }
 
-function sentenceCase(text) {
-  if (!text) {
-    return "";
-  }
-
-  return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
-function buildSummaryNarrative(card, orientation) {
-  const summary = localizedSummary(card, orientation);
-  const keyword = localizedPrimaryKeyword(card).toLowerCase();
-  const cardTitle = localizedCardName(card);
-
-  if (currentLanguage === "vi") {
-    const tone =
-      orientation === "reversed"
-      ? `Lá bài ${cardTitle} xuất hiện ở chiều ngược, nên năng lượng hôm nay mang màu sắc hướng nội hơn và đòi hỏi bạn phải đi chậm để nhìn rõ điều gì đang lệch khỏi quỹ đạo.`
-      : `Lá bài ${cardTitle} xuất hiện ở chiều thuận, mang theo một dòng năng lượng khá rõ ràng, như thể ngày hôm nay đang mời bạn bước vào bài học này bằng sự chủ động và tỉnh táo.`;
-    return `${tone} Chủ đề cốt lõi của bạn hôm nay xoay quanh ${keyword}. ${summary} Điều cần làm không phải là vội kết luận, mà là ở lại với thông điệp này đủ lâu để nó thấm vào cách bạn lựa chọn, phản ứng, và giữ nhịp cho cả ngày.`;
-  }
-
-  const opening =
-    orientation === "reversed"
-      ? `Today's card, ${cardTitle}, arrives reversed, so I would read its message as more inward, more delicate, and a little more cautionary than usual.`
-      : `Today's card, ${cardTitle}, arrives upright, and it carries a clear current you can work with consciously throughout the day.`;
-
-  return `${opening} The central theme moving through your day is ${keyword}. ${summary} Let this be the message you return to whenever the day begins to scatter your attention.`;
-}
-
-function buildArtworkNarrative(card) {
-  const artwork = localizedArtwork(card);
-  const keywords = localizedKeywords(card);
-  const normalizedArtwork = artwork.endsWith(".") ? artwork : `${artwork}.`;
-  if (currentLanguage === "vi") {
-    return trimSentence(`${normalizedArtwork} Hãy chú ý đến ${joinKeywords(keywords.slice(0, 2)).toLowerCase()}.`, 145);
-  }
-
-  return trimSentence(`${normalizedArtwork} Notice ${joinKeywords(keywords.slice(0, 2)).toLowerCase()} here.`, 145);
-}
-
-function buildThemeNarrative(card, orientation, themeName) {
-  const theme = THEME_META[themeName];
-  const guidance = NARRATIVE_GUIDANCE[themeName];
-  const themeCopy = readingCopy(card, orientation, themeName);
-  const keyword = localizedPrimaryKeyword(card).toLowerCase();
-  const cardTitle = localizedCardName(card);
-  if (currentLanguage === "vi") {
-    const guidanceMap = {
-      general: {
-        should: "đi chậm, quan sát kỹ hơn những tín hiệu nhỏ, và để thông điệp này dẫn nhịp cho cách bạn phản ứng suốt cả ngày",
-        shouldNot: "vội gắn nhãn mọi việc, ép mình phải có câu trả lời ngay, hoặc bỏ qua điều trực giác đang nhắc rất khẽ"
-      },
-      work: {
-        should: "giữ trọng tâm vào việc quan trọng nhất, chọn từng bước thật rõ, và làm từ sự vững vàng thay vì từ cảm giác bị thúc ép",
-        shouldNot: "ôm quá nhiều thứ một lúc, để áp lực kéo bạn đi nhanh hơn sự sáng suốt, hoặc phản ứng chỉ để giải quyết cảm giác căng thẳng trước mắt"
-      },
-      relationship: {
-        should: "lắng nghe sâu hơn, nói thật hơn, và để sự mềm mại đi cùng với ranh giới rõ ràng khi cần",
-        shouldNot: "đoán ý đối phương, phản ứng theo vết thương cũ, hoặc cố kiểm soát cảm xúc chỉ để tránh một cuộc trò chuyện thật"
-      },
-      money: {
-        should: "giữ mình thật thực tế, nhìn mọi lựa chọn bằng sự bình tĩnh, và ưu tiên điều bền vững hơn cảm giác an tâm nhất thời",
-        shouldNot: "ra quyết định trong lúc lo lắng, chi tiêu hay giữ chặt chỉ vì sợ hãi, hoặc để áp lực ngắn hạn làm lệch mất bức tranh lớn hơn"
-      },
-      mind: {
-        should: "trở về với nhịp thở, quan sát dòng suy nghĩ của mình, và chọn một cách nhìn giúp bạn sáng hơn thay vì nặng hơn",
-        shouldNot: "nuôi thêm vòng lặp suy diễn, tin mọi nỗi sợ vừa xuất hiện, hoặc để tiếng ồn trong đầu lấn át điều bạn thật sự biết là đúng"
-      }
-    };
-    const orientationNote =
-      orientation === "reversed"
-        ? `Vì lá bài xuất hiện ở chiều ngược, thông điệp này thường cần được nhìn bằng sự chậm rãi và thành thật hơn, như một điều đang đòi hỏi bạn điều chỉnh lại thay vì tiếp tục như cũ.`
-        : `Vì lá bài xuất hiện ở chiều thuận, năng lượng này có thể được sống cùng một cách chủ động hơn, miễn là bạn đủ tỉnh táo để nhận ra nó đang mở ra ở đâu trong ngày.`;
-    const summary = localizedSummary(card, orientation);
-    const closingMap = {
-      general: "Hãy để thông điệp này làm nhịp nền cho cả ngày, thay vì chỉ xem nó như một ý niệm thoáng qua.",
-      work: "Bạn không cần xử lý mọi thứ cùng lúc, nhưng bạn cần giữ sự tỉnh táo đủ lâu để chọn đúng bước tiếp theo.",
-      relationship: "Điều quan trọng ở đây không phải phản ứng nhanh, mà là phản ứng đúng với sự thật đang hiện ra.",
-      money: "Nếu giữ được sự bình tĩnh, bạn sẽ thấy lựa chọn đúng thường đến từ sự rõ ràng chứ không đến từ áp lực.",
-      mind: "Hãy xem đây như lời mời trở về với nhịp thở, sự quan sát, và điều bạn thực sự biết là đúng."
-    };
-    return `${themeCopy} ${orientationNote} Nhìn sâu hơn, ${cardTitle} còn cho thấy ${sentenceCase(summary)} Bạn nên ${guidanceMap[themeName].should}. Bạn không nên ${guidanceMap[themeName].shouldNot}. ${closingMap[themeName]}`;
-  }
-
-  const summary = localizedSummary(card, orientation);
-  const orientationNote =
-    orientation === "reversed"
-      ? `Because the card is reversed, I would read this as an energy that needs extra awareness and gentleness.`
-      : `Because the card is upright, I would read this as an energy you can actively lean into today.`;
-
-  return `In the ${theme.label.toLowerCase()} area, ${cardTitle} places ${keyword} right at the center of the conversation. ${themeCopy} ${orientationNote} To me, this suggests that ${sentenceCase(summary)} You should ${guidance.should}. You should not ${guidance.shouldNot}. If you stay close to this message, the theme becomes much easier to navigate with grace instead of reaction.`;
-}
-
 function buildThemeSummary(card, orientation, themeName, reading = currentReading) {
-  const content = readingContent(reading);
-  const aiSummary = content?.detailed_reading?.[themeName];
-  if (aiSummary) {
-    return aiSummary;
-  }
-
-  const baseCopy = readingCopy(card, orientation, themeName);
-  if (currentLanguage === "vi") {
-    return baseCopy;
-  }
-
-  const keyword = localizedPrimaryKeyword(card).toLowerCase();
-  const cardName = localizedCardName(card);
-  const intros = {
-    general: `This card brings ${keyword} into focus today.`,
-    work: `In work, ${cardName} highlights ${keyword}.`,
-    relationship: `In relationships, ${cardName} points to ${keyword}.`,
-    money: `For money matters, ${cardName} favors ${keyword}.`,
-    mind: `Mentally, ${cardName} asks for ${keyword}.`
-  };
-
-  return `${intros[themeName]} ${baseCopy}`;
+  const exactThemeCopy = localizedThemeCopy(card, orientation, themeName);
+  return exactThemeCopy || "";
 }
 
 function buildExportSummary(card, orientation, reading = currentReading) {
@@ -585,11 +1109,10 @@ function trimSentence(text, maxLength) {
 }
 
 function buildExportCopy(card, orientation, reading = currentReading) {
-  const content = readingContent(reading);
   const orientationLabel = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
   const cardName = localizedCardName(card);
-  const primaryKeyword = content?.keywords?.main || localizedPrimaryKeyword(card);
-  const keywords = (content?.keywords?.supporting || localizedKeywords(card)).filter(Boolean);
+  const primaryKeyword = localizedPrimaryKeyword(card);
+  const keywords = localizedKeywords(card).filter(Boolean);
   const readingDate = formatToday();
   const intro =
     currentLanguage === "vi"
@@ -664,9 +1187,8 @@ function setThemeTab(themeName) {
   if (currentReading) {
     const card = lookupCard(currentReading.cardKey);
     if (card) {
-      const content = readingContent(currentReading);
-      themeReading.textContent =
-        content?.detailed_reading?.[themeName] || buildThemeNarrative(card, currentReading.orientation, themeName);
+      const exactThemeCopy = localizedThemeCopy(card, currentReading.orientation, themeName);
+      themeReading.textContent = exactThemeCopy;
     }
   } else {
     themeReading.textContent = "";
@@ -685,6 +1207,10 @@ function renderLanguage() {
   refreshLink.setAttribute("title", t("refreshAria"));
   closeHistoryButton.setAttribute("aria-label", t("closeAria"));
   closeExportButton.setAttribute("aria-label", t("closeAria"));
+  cancelSelectionButton.setAttribute("aria-label", t("returnToOrbitAria"));
+  deckInteraction.cards.forEach((entry) => {
+    entry.element.setAttribute("aria-label", t("selectCardAria"));
+  });
 
   themeTabs.forEach((tab) => {
     tab.lastElementChild.textContent = themeLabel(tab.dataset.theme);
@@ -715,6 +1241,11 @@ function updateHeaderScrollState() {
 }
 
 function attachFallback(imageNode) {
+  if (imageNode.dataset.fallbackBound === "true") {
+    return;
+  }
+
+  imageNode.dataset.fallbackBound = "true";
   imageNode.addEventListener("error", () => {
     const fallback = imageNode.dataset.fallback;
     if (fallback && imageNode.src !== fallback) {
@@ -741,8 +1272,9 @@ function renderReading(reading) {
     return;
   }
 
+  resetDeckInteractionState();
+  setDeckShellHidden(false);
   currentReading = reading;
-  const content = readingContent(reading);
   const orientation = reading.orientation;
   const fallback = createArtworkUri(card, orientation);
   const source = artworkSource(card, orientation);
@@ -768,15 +1300,19 @@ function renderReading(reading) {
   cardName.textContent = localizedCardName(card);
   cardOrientation.textContent = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
   cardSummary.textContent = "";
-  primaryKeyword.textContent = content?.keywords?.main || localizedPrimaryKeyword(card);
-  keywordSupport.textContent = `${t("supportKeywords")}: ${(content?.keywords?.supporting || localizedKeywords(card)).filter(Boolean).join(", ")}`;
+  primaryKeyword.textContent = localizedPrimaryKeyword(card);
+  keywordSupport.textContent = `${t("supportKeywords")}: ${localizedKeywords(card).filter(Boolean).join(", ")}`;
   cardArtworkBackText.textContent = "";
 
   updateRevealPanel(card);
   shareButton.classList.remove("hidden");
   activeTheme = "general";
-  revealText(cardSummary, content?.general_reading || buildSummaryNarrative(card, orientation), 10);
-  cardArtworkBackText.textContent = content?.artwork_readthrough || buildArtworkNarrative(card);
+  revealText(
+    cardSummary,
+    localizedSummary(card, orientation),
+    10
+  );
+  cardArtworkBackText.textContent = localizedArtwork(card);
   setThemeTab(activeTheme);
 }
 
@@ -788,7 +1324,6 @@ function renderHistory(history) {
         .reverse()
         .map((entry) => {
           const card = lookupCard(entry.cardKey);
-          const content = readingContent(entry);
           if (!card) {
             return "";
           }
@@ -800,7 +1335,7 @@ function renderHistory(history) {
                 <span class="status-badge muted">${entry.orientation === "reversed" ? t("orientationReversed") : t("orientationUpright")}</span>
               </div>
               <h3>${localizedCardName(card)}</h3>
-              <p>${content?.general_reading || localizedSummary(card, entry.orientation)}</p>
+              <p>${localizedSummary(card, entry.orientation)}</p>
             </article>
           `;
         })
@@ -889,7 +1424,7 @@ function revealAnimation(reading) {
 }
 
 async function handleDraw() {
-  if (deckShell.classList.contains("is-drawing")) {
+  if (deckShell.classList.contains("is-drawing") || deckInteraction.phase !== "idle") {
     return;
   }
 
@@ -902,37 +1437,15 @@ async function handleDraw() {
     return;
   }
 
-  if (FRONTEND_ONLY_MODE) {
-    const reading = { date: dateKey, ...randomDraw() };
-    state.current = reading;
-    state.history = [...(state.history || []).filter((item) => item.date !== dateKey), reading].slice(-14);
-    saveState(state);
-    revealAnimation(reading);
-    return;
-  }
-
-  try {
-    deckButton.disabled = true;
-    const response = await requestDraw();
-    const saved = saveApiState(response.reading, response.history);
-    renderHistory(saved.history);
-    revealAnimation(saved.reading);
-    return;
-  } catch (error) {
-    if (error.status === 429 && error.payload?.fallback_reading) {
-      showRateLimitDialog(error.payload);
-      return;
-    }
-    console.error(error);
-  } finally {
-    deckButton.disabled = false;
-  }
+  beginDeckSelection();
 }
 
 function resetDeckState() {
+  resetDeckInteractionState();
+  setDeckShellHidden(false);
   revealPanel.classList.add("hidden");
   deckButton.classList.remove("hidden");
-  deckShell.classList.remove("is-drawing", "is-flipping", "is-revealed");
+  deckShell.classList.remove("is-drawing", "is-flipping", "is-revealed", "is-hidden");
   heroPulledCard.style.transform = "";
 }
 
@@ -972,6 +1485,9 @@ function closeHistoryDialog() {
 }
 
 function continueToReading() {
+  if (currentReading && summaryPanel.classList.contains("hidden")) {
+    renderReading(currentReading);
+  }
   summaryViewport.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1262,6 +1778,8 @@ langEnglish.addEventListener("click", () => setLanguage("en"));
 langVietnamese.addEventListener("click", () => setLanguage("vi"));
 deckButton.addEventListener("click", handleDraw);
 deckShell.addEventListener("click", handleDraw);
+revealSelectionButton.addEventListener("click", revealSelectedCard);
+cancelSelectionButton.addEventListener("click", cancelSelectedCardSelection);
 continueButton.addEventListener("click", continueToReading);
 shareButton.addEventListener("click", handleDownloadCard);
 cardFlipButton.addEventListener("click", toggleCardFlip);
@@ -1292,7 +1810,17 @@ if (window.matchMedia("(pointer: fine)").matches) {
 }
 
 window.addEventListener("scroll", updateHeaderScrollState, { passive: true });
+window.addEventListener("resize", () => {
+  if (deckInteraction.phase !== "idle") {
+    updateDeckInteractionMetrics();
+  }
+});
 updateHeaderScrollState();
 
-renderLanguage();
-syncUi();
+async function initializeApp() {
+  await (window.TAROT_CARD_JSON_READY || Promise.resolve());
+  renderLanguage();
+  await syncUi();
+}
+
+initializeApp();

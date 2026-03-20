@@ -1,0 +1,16 @@
+[Unit]
+Description=Arcana Daily backend
+After=network.target
+
+[Service]
+Type=simple
+User=ryan
+Group=ryan
+WorkingDirectory=/opt/arcana-hub/apps/daily-arcana/backend
+EnvironmentFile=/opt/arcana-hub/apps/daily-arcana/backend/.env
+ExecStart=/usr/bin/python3 /opt/arcana-hub/apps/daily-arcana/backend/server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
