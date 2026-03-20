@@ -59,6 +59,19 @@
             <span class="deck-glow"></span>
           </button>
 
+          <div class="deck-oracle hidden" id="deckOracle" aria-live="polite">
+            <div class="deck-orbit-field" id="deckOrbitField"></div>
+            <div class="selection-controls hidden" id="selectionControls">
+              <button class="ghost-button reveal-button icon-support" id="revealSelectionButton" type="button">
+                <span class="button-icon" aria-hidden="true"><i class="ph ph-eye"></i></span>
+                <span class="button-label" data-i18n="revealMyCard">Reveal my card</span>
+              </button>
+              <button class="ghost-button secondary-button selection-cancel" id="cancelSelectionButton" type="button" aria-label="Return card to orbit">
+                <span class="button-icon" aria-hidden="true"><i class="ph ph-x"></i></span>
+              </button>
+            </div>
+          </div>
+
           <button class="draw-cta icon-support" id="deckButton" type="button">
             <span class="button-icon" aria-hidden="true"><i class="ph ph-cards"></i></span>
             <span class="button-label" data-i18n="drawButton">Draw your card</span>
@@ -163,6 +176,10 @@
                   <button class="theme-tab" id="tab-money" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="money">
                     <span class="theme-tab-icon"><i class="ph ph-coins"></i></span>
                     <span id="tabLabelMoney" data-i18n="themeMoney">Money</span>
+                  </button>
+                  <button class="theme-tab" id="tab-body" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="body">
+                    <span class="theme-tab-icon"><i class="ph ph-person-simple"></i></span>
+                    <span id="tabLabelBody" data-i18n="themeBody">Body</span>
                   </button>
                   <button class="theme-tab" id="tab-mind" type="button" role="tab" aria-selected="false" aria-controls="themePanel" data-theme="mind">
                     <span class="theme-tab-icon"><i class="ph ph-moon-stars"></i></span>

@@ -745,6 +745,24 @@ def pick_daily_reading(user_id, draw_date):
     return card["key"], orientation
 
 
+def resolve_requested_draw(user_id, draw_date, redraw=False, selected_card_key="", selected_orientation=""):
+    card_key = (selected_card_key or "").strip()
+    orientation = (selected_orientation or "").strip().lower()
+
+    if card_key:
+        if card_key not in DECK_BY_KEY:
+            raise ValueError("Unknown selected_card_key")
+        if orientation and orientation not in {"upright", "reversed"}:
+            raise ValueError("Unknown selected_orientation")
+        return card_key, (orientation or ("reversed" if secrets.randbelow(2) else "upright"))
+
+    if redraw:
+        seed = secrets.randbelow(len(DECK))
+        return DECK[seed]["key"], ("reversed" if secrets.randbelow(2) else "upright")
+
+    return pick_daily_reading(user_id, draw_date)
+
+
 def row_to_dict(row):
     return {key: row[key] for key in row.keys()}
 
@@ -1409,6 +1427,8 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
 
         redraw = bool(payload.get("redraw"))
         user_context = (payload.get("user_context") or "").strip()
+        selected_card_key = payload.get("selected_card_key") or ""
+        selected_orientation = payload.get("selected_orientation") or ""
         existing = self.get_today_reading(user["id"])
         if existing and not redraw:
             self.send_json(
@@ -1421,12 +1441,17 @@ class TarotRequestHandler(BaseHTTPRequestHandler):
             return
 
         draw_date = date_key_local()
-        if redraw:
-            seed = secrets.randbelow(len(DECK))
-            card_key = DECK[seed]["key"]
-            orientation = "reversed" if secrets.randbelow(2) else "upright"
-        else:
-            card_key, orientation = pick_daily_reading(user["id"], draw_date)
+        try:
+            card_key, orientation = resolve_requested_draw(
+                user["id"],
+                draw_date,
+                redraw=redraw,
+                selected_card_key=selected_card_key,
+                selected_orientation=selected_orientation,
+            )
+        except ValueError as error:
+            self.send_json(400, {"error": str(error)})
+            return
         created_at = iso_timestamp(utc_now())
         interpretation_result = generate_interpretation(card_key, orientation, user_context)
         interpretation = interpretation_result["interpretation"]
