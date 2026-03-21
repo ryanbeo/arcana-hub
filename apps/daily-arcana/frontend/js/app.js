@@ -3,6 +3,11 @@ const LANGUAGE_STORAGE_KEY = "arcana-daily-language";
 const CLIENT_ID_STORAGE_KEY = "arcana-daily-client-id";
 const API_BASE_URL = (window.ARCANA_API_BASE_URL || "https://arcana-hub.onrender.com").replace(/\/$/, "");
 const FRONTEND_ONLY_MODE = window.ARCANA_FRONTEND_ONLY !== false;
+const USER_AGENT = navigator.userAgent || "";
+const IS_MOBILE_SAFARI =
+  /AppleWebKit/i.test(USER_AGENT) &&
+  !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(USER_AGENT) &&
+  (/iPhone|iPad|iPod/i.test(USER_AGENT) || (/Macintosh/i.test(USER_AGENT) && navigator.maxTouchPoints > 1));
 
 const dateHeading = document.getElementById("dateHeading");
 const langEnglish = document.getElementById("langEnglish");
@@ -182,6 +187,8 @@ const clientId = loadClientId();
 let pendingFallbackReading = null;
 let pendingRateLimit = null;
 let deckInteraction = createDeckInteractionState();
+
+document.documentElement.classList.toggle("is-mobile-safari", IS_MOBILE_SAFARI);
 
 function t(key) {
   return UI_COPY[currentLanguage][key] || UI_COPY.en[key] || key;
@@ -582,14 +589,15 @@ function updateDeckInteractionMetrics() {
   const height = deckOracle.clientHeight || drawStage?.clientHeight || 0;
   const shellWidth = deckShell.getBoundingClientRect().width || 300;
   const isMobile = window.innerWidth < 760;
+  const useReducedMobileOrbit = isMobile && IS_MOBILE_SAFARI;
   const baseRadius = Math.min(width, height) * (isMobile ? 0.43 : 0.46);
   const orbitRadius = clampValue(
-    Math.min(width * (isMobile ? 0.78 : 0.68), height * (isMobile ? 0.82 : 0.9)),
-    isMobile ? 280 : 560,
-    isMobile ? 460 : 860
+    Math.min(width * (useReducedMobileOrbit ? 0.7 : isMobile ? 0.78 : 0.68), height * (useReducedMobileOrbit ? 0.72 : isMobile ? 0.82 : 0.9)),
+    useReducedMobileOrbit ? 240 : isMobile ? 280 : 560,
+    useReducedMobileOrbit ? 380 : isMobile ? 460 : 860
   );
-  const orbitHubY = isMobile ? orbitRadius + height * 0.16 : orbitRadius - height * 0.18;
-  const cardWidth = shellWidth;
+  const orbitHubY = useReducedMobileOrbit ? orbitRadius + height * 0.24 : isMobile ? orbitRadius + height * 0.16 : orbitRadius - height * 0.18;
+  const cardWidth = useReducedMobileOrbit ? shellWidth * 0.8 : shellWidth;
 
   deckInteraction.metrics = {
     width,
@@ -602,6 +610,14 @@ function updateDeckInteractionMetrics() {
   deckInteraction.cards.forEach((entry) => {
     entry.element.style.setProperty("--orbit-card-width", `${cardWidth}px`);
   });
+}
+
+function orbitVisibleArc() {
+  if (window.innerWidth < 760 && IS_MOBILE_SAFARI) {
+    return 0.82;
+  }
+
+  return ORBIT_VISIBLE_ARC;
 }
 
 function selectedCardTargetY() {
@@ -815,7 +831,7 @@ function computeOrbitTarget(entry, spreadProgress = 1) {
   const y = finalY * spreadProgress;
   const scale = 1;
   const rotation = angle * (180 / Math.PI);
-  const visibility = clampValue((ORBIT_VISIBLE_ARC - Math.abs(angle)) / 0.36, 0, 1);
+  const visibility = clampValue((orbitVisibleArc() - Math.abs(angle)) / 0.36, 0, 1);
   const opacity = easeOutQuint(visibility) * spreadProgress;
   const zIndex = 1000 + Math.round((x + deckInteraction.metrics.orbitRadius) * 10);
 
