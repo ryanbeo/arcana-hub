@@ -170,6 +170,9 @@ const ORBIT_SELECTED_SCALE = 1;
 const ORBIT_VISIBLE_ARC = 1.16;
 const ORBIT_PUSH_DOWN_RATIO = 0.3;
 const REVEALED_STACK_VISIBLE_COUNT = 3;
+const ORBIT_RENDER_COUNT_DESKTOP = 24;
+const ORBIT_RENDER_COUNT_MOBILE = 18;
+const ORBIT_RENDER_COUNT_MOBILE_SAFARI = 14;
 const REVEALED_STACK_PATTERN = [
   { x: -22, y: 18, rotation: -7 },
   { x: 22, y: 18, rotation: 7 },
@@ -189,6 +192,11 @@ let pendingRateLimit = null;
 let deckInteraction = createDeckInteractionState();
 
 document.documentElement.classList.toggle("is-mobile-safari", IS_MOBILE_SAFARI);
+
+function setReadingScrollLocked(locked) {
+  document.documentElement.classList.toggle("is-reading-locked", locked);
+  document.body.classList.toggle("is-reading-locked", locked);
+}
 
 function t(key) {
   return UI_COPY[currentLanguage][key] || UI_COPY.en[key] || key;
@@ -616,6 +624,18 @@ function orbitVisibleArc() {
   return ORBIT_VISIBLE_ARC;
 }
 
+function renderedOrbitCardCount() {
+  if (window.innerWidth < 760 && IS_MOBILE_SAFARI) {
+    return ORBIT_RENDER_COUNT_MOBILE_SAFARI;
+  }
+
+  if (window.innerWidth < 760) {
+    return ORBIT_RENDER_COUNT_MOBILE;
+  }
+
+  return ORBIT_RENDER_COUNT_DESKTOP;
+}
+
 function selectedCardTargetY() {
   const oracleBounds = deckOracle.getBoundingClientRect();
   const oracleCenterY = oracleBounds.top + oracleBounds.height / 2;
@@ -808,9 +828,10 @@ function buildOrbitCardEntry(card, ringIndex, slotIndex, count) {
 
 function buildDeckOrbit() {
   const shuffledDeck = shuffleItems(window.TAROT_DATABASE.cards);
-  const count = shuffledDeck.length;
+  const visibleDeck = shuffledDeck.slice(0, renderedOrbitCardCount());
+  const count = visibleDeck.length;
 
-  shuffledDeck.forEach((card, slotIndex) => {
+  visibleDeck.forEach((card, slotIndex) => {
     const entry = buildOrbitCardEntry(card, 0, slotIndex, count);
     deckInteraction.cards.push(entry);
     deckOrbitField.appendChild(entry.element);
@@ -1348,7 +1369,8 @@ function attachFallback(imageNode) {
 attachFallback(cardArtwork);
 attachFallback(heroCardArtwork);
 
-function updateRevealPanel(card, { animate = true } = {}) {
+function updateRevealPanel(card, { animate = true, lockScroll = true } = {}) {
+  setReadingScrollLocked(lockScroll);
   revealHeadline.textContent = localizedCardName(card);
   revealTags.innerHTML = localizedKeywords(card)
     .slice(0, 4)
@@ -1370,6 +1392,7 @@ function renderReading(reading, { animateIn = false, animateRevealPanel = true }
     return;
   }
 
+  setReadingScrollLocked(false);
   resetDeckInteractionState();
   setDeckShellHidden(false);
   currentReading = reading;
@@ -1408,7 +1431,7 @@ function renderReading(reading, { animateIn = false, animateRevealPanel = true }
   keywordSupport.textContent = `${t("supportKeywords")}: ${localizedKeywords(card).filter(Boolean).join(", ")}`;
   cardArtworkBackText.textContent = "";
 
-  updateRevealPanel(card, { animate: animateRevealPanel });
+  updateRevealPanel(card, { animate: animateRevealPanel, lockScroll: animateRevealPanel });
   shareButton.classList.remove("hidden");
   activeTheme = "general";
   revealText(
@@ -1545,6 +1568,7 @@ async function handleDraw() {
 }
 
 function resetDeckState() {
+  setReadingScrollLocked(false);
   resetDeckInteractionState();
   setDeckShellHidden(false);
   revealPanel.classList.add("hidden");
@@ -1554,6 +1578,7 @@ function resetDeckState() {
 }
 
 function clearAllState() {
+  setReadingScrollLocked(false);
   localStorage.removeItem(STORAGE_KEY);
   currentReading = null;
   activeTheme = "general";
@@ -1924,6 +1949,12 @@ window.addEventListener("resize", () => {
 updateHeaderScrollState();
 
 async function initializeApp() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch((error) => {
+      console.warn("Service worker registration failed.", error);
+    });
+  }
+
   await (window.TAROT_CARD_JSON_READY || Promise.resolve());
   renderLanguage();
   await syncUi();

@@ -1,0 +1,19 @@
+{
+  "name": "Arcana Daily",
+  "short_name": "Arcana Daily",
+  "description": "Draw one tarot card each day and explore its artwork, symbolism, and reading.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09070d",
+  "theme_color": "#09070d",
+  "icons": [
+    {
+      "src": "./assets/icons/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
