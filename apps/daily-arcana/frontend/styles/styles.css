@@ -716,29 +716,6 @@ body.is-scrolled .language-link {
   pointer-events: auto;
 }
 
-.selection-guidance {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 10021;
-  margin: 0;
-  padding: 0.65rem 1rem;
-  border-radius: 999px;
-  background: rgba(14, 10, 22, 0.62);
-  border: 1px solid rgba(255, 223, 165, 0.18);
-  backdrop-filter: blur(14px);
-  color: var(--muted);
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transform: translate(-50%, calc(-50% - var(--selection-control-offset, 292px)));
-}
-
-.is-mobile-safari .selection-guidance {
-  backdrop-filter: none;
-}
-
 .selection-cancel {
   width: 3.5rem;
   height: 3.5rem;
@@ -1530,14 +1507,6 @@ h3 {
   .card-frame {
     min-height: 430px;
     padding: 0.75rem;
-  }
-
-  .selection-guidance {
-    font-size: 0.72rem;
-    padding: 0.55rem 0.9rem;
-    max-width: min(calc(100vw - 2.5rem), 320px);
-    white-space: normal;
-    text-align: center;
   }
 
   .deck-shell {
