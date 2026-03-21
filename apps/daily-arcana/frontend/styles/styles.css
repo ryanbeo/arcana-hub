@@ -1419,6 +1419,15 @@ h3 {
     --selection-control-offset: 172px;
   }
 
+  html.is-reading-locked .draw-viewport,
+  body.is-reading-locked .draw-viewport {
+    min-height: 100svh;
+    max-height: 100svh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    place-items: start center;
+  }
+
   .draw-viewport {
     padding:
       calc(var(--safe-top) + 5.2rem)
@@ -1428,8 +1437,9 @@ h3 {
   }
 
   .draw-stage {
-    min-height: 720px;
-    padding: 4rem 0 2.5rem;
+    min-height: min(720px, calc(100svh - var(--safe-top) - var(--safe-bottom) - 7rem));
+    gap: 1.5rem;
+    padding: 2rem 0 calc(var(--safe-bottom) + 1.5rem);
   }
 
   .utility-links {
@@ -1527,8 +1537,27 @@ h3 {
   }
 
   .reveal-panel {
-    margin-top: clamp(7.5rem, 13vh, 10rem);
+    gap: 0.55rem;
+    margin-top: clamp(3.75rem, 7vh, 5.75rem);
     padding-top: 0;
+  }
+
+  .reveal-panel h1 {
+    font-size: clamp(2.25rem, 10vw, 3.6rem);
+  }
+
+  .reveal-kicker {
+    font-size: 0.88rem;
+  }
+
+  .reveal-actions {
+    width: 100%;
+    margin-top: 0.35rem;
+  }
+
+  .reveal-button {
+    width: min(100%, 22rem);
+    justify-content: center;
   }
 
   .tarot-card {
