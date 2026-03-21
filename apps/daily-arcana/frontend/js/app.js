@@ -14,7 +14,6 @@ const deckShell = document.getElementById("deckShell");
 const deckOracle = document.getElementById("deckOracle");
 const deckOrbitField = document.getElementById("deckOrbitField");
 const selectionControls = document.getElementById("selectionControls");
-const revealSelectionButton = document.getElementById("revealSelectionButton");
 const cancelSelectionButton = document.getElementById("cancelSelectionButton");
 const parallaxLayers = document.querySelectorAll("[data-parallax-layer]");
 const heroPulledCard = document.getElementById("heroPulledCard");
@@ -161,10 +160,16 @@ const ORBIT_SPREAD_DURATION = 960;
 const ORBIT_SELECTION_DURATION = 520;
 const ORBIT_RETURN_DURATION = 360;
 const ORBIT_DISPERSAL_DURATION = 720;
+const UI_STAGE_TRANSITION_DURATION = 360;
 const ORBIT_SELECTED_SCALE = 1;
 const ORBIT_VISIBLE_ARC = 1.16;
-const ORBIT_PUSH_DOWN_RATIO = 0.15;
-const ORBIT_SELECTED_RISE_RATIO = 0.2;
+const ORBIT_PUSH_DOWN_RATIO = 0.3;
+const REVEALED_STACK_VISIBLE_COUNT = 3;
+const REVEALED_STACK_PATTERN = [
+  { x: -22, y: 18, rotation: -7 },
+  { x: 22, y: 18, rotation: 7 },
+  { x: 0, y: 10, rotation: -1 }
+];
 
 let activeTheme = "general";
 let currentReading = null;
@@ -576,13 +581,14 @@ function updateDeckInteractionMetrics() {
   const width = deckOracle.clientWidth || drawStage?.clientWidth || 0;
   const height = deckOracle.clientHeight || drawStage?.clientHeight || 0;
   const shellWidth = deckShell.getBoundingClientRect().width || 300;
-  const baseRadius = Math.min(width, height) * (window.innerWidth < 760 ? 0.43 : 0.46);
+  const isMobile = window.innerWidth < 760;
+  const baseRadius = Math.min(width, height) * (isMobile ? 0.43 : 0.46);
   const orbitRadius = clampValue(
-    Math.min(width * (window.innerWidth < 760 ? 0.84 : 0.68), height * (window.innerWidth < 760 ? 0.96 : 0.9)),
-    window.innerWidth < 760 ? 340 : 560,
-    window.innerWidth < 760 ? 520 : 860
+    Math.min(width * (isMobile ? 0.78 : 0.68), height * (isMobile ? 0.82 : 0.9)),
+    isMobile ? 280 : 560,
+    isMobile ? 460 : 860
   );
-  const orbitHubY = orbitRadius - height * (window.innerWidth < 760 ? 0.28 : 0.18);
+  const orbitHubY = isMobile ? orbitRadius + height * 0.16 : orbitRadius - height * 0.18;
   const cardWidth = shellWidth;
 
   deckInteraction.metrics = {
@@ -616,6 +622,82 @@ function revealedCardTargetX() {
 
 function revealedCardTargetY() {
   return -(deckInteraction.metrics.height || 0) * 0.14;
+}
+
+function animateStageEntrance(...elements) {
+  elements.filter(Boolean).forEach((element) => {
+    element.classList.remove("hidden", "is-transitioning-out");
+    element.classList.add("is-entering");
+  });
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      elements.filter(Boolean).forEach((element) => {
+        element.classList.remove("is-entering");
+      });
+    });
+  });
+}
+
+function revealedStackScaleUnit() {
+  return (deckShell.getBoundingClientRect().width || 300) / 300;
+}
+
+function revealedStackBaseY() {
+  const shellWidth = deckShell.getBoundingClientRect().width || 300;
+  return revealedCardTargetY() + shellWidth * (window.innerWidth < 760 ? 0.18 : 0.22);
+}
+
+function revealedDeckPosition(entry) {
+  if (entry.revealedLayout) {
+    return entry.revealedLayout;
+  }
+
+  const stackIndex = entry.revealedStackIndex < 0 ? 0 : entry.revealedStackIndex;
+  const pattern = REVEALED_STACK_PATTERN[stackIndex % REVEALED_STACK_PATTERN.length];
+  const scaleUnit = revealedStackScaleUnit();
+  const isVisible = stackIndex < REVEALED_STACK_VISIBLE_COUNT;
+
+  return {
+    x: pattern.x * scaleUnit,
+    y: revealedStackBaseY() + pattern.y * scaleUnit,
+    rotation: pattern.rotation,
+    scale: 1,
+    opacity: isVisible ? 1 : 0,
+    zIndex: 200 + (REVEALED_STACK_VISIBLE_COUNT - Math.min(stackIndex, REVEALED_STACK_VISIBLE_COUNT - 1))
+  };
+}
+
+function cacheRevealedLayout(selectedEntry) {
+  deckInteraction.cards.forEach((entry) => {
+    if (entry === selectedEntry) {
+      entry.revealedLayout = {
+        x: revealedCardTargetX(),
+        y: revealedCardTargetY(),
+        rotation: 0,
+        scale: ORBIT_SELECTED_SCALE,
+        opacity: 1,
+        zIndex: 10000
+      };
+      return;
+    }
+
+    entry.revealedLayout = revealedDeckPosition(entry);
+  });
+}
+
+function assignRevealedStackOrder(selectedEntry) {
+  let stackIndex = 0;
+
+  deckInteraction.cards.forEach((entry) => {
+    if (entry === selectedEntry) {
+      entry.revealedStackIndex = -1;
+      return;
+    }
+
+    entry.revealedStackIndex = stackIndex;
+    stackIndex += 1;
+  });
 }
 
 function animateOrbitSpreadOffset(offsetY = 0, duration = ORBIT_SELECTION_DURATION, easing = easeOutQuint) {
@@ -654,9 +736,8 @@ function resetDeckInteractionState() {
   deckInteraction = createDeckInteractionState();
   deckOrbitField.innerHTML = "";
   deckOracle.classList.add("hidden");
-  deckOracle.classList.remove("has-selection", "is-loading");
+  deckOracle.classList.remove("has-selection", "is-loading", "is-transitioning-out", "is-entering");
   selectionControls.classList.add("hidden");
-  revealSelectionButton.disabled = false;
   cancelSelectionButton.disabled = false;
 }
 
@@ -696,10 +777,17 @@ function buildOrbitCardEntry(card, ringIndex, slotIndex, count) {
     frozenRotation: 0,
     frozenScale: 1,
     frozenOpacity: 1,
-    frozenZIndex: 0
+    frozenZIndex: 0,
+    revealedStackIndex: -1,
+    revealedLayout: null
   };
 
   element.addEventListener("click", () => {
+    if (deckInteraction.phase === "selected" && deckInteraction.selectedCard === entry) {
+      revealSelectedCard();
+      return;
+    }
+
     handleOrbitCardSelection(entry);
   });
 
@@ -804,11 +892,12 @@ function freezeOrbitCards() {
     entry.frozenScale = entry.scale;
     entry.frozenOpacity = entry.opacity;
     entry.frozenZIndex = entry.zIndex;
+    entry.revealedLayout = null;
   });
 }
 
 function orbitIdlePosition(entry) {
-  if (entry === deckInteraction.selectedCard && ["selected", "revealing"].includes(deckInteraction.phase)) {
+  if (entry === deckInteraction.selectedCard && ["selected", "flipping"].includes(deckInteraction.phase)) {
     return {
       x: selectedCardTargetX(),
       y: selectedCardTargetY(),
@@ -819,8 +908,8 @@ function orbitIdlePosition(entry) {
     };
   }
 
-  if (entry === deckInteraction.selectedCard && ["revealed", "dispersing"].includes(deckInteraction.phase)) {
-    return {
+  if (entry === deckInteraction.selectedCard && ["revealing", "revealed", "dispersing"].includes(deckInteraction.phase)) {
+    return entry.revealedLayout || {
       x: revealedCardTargetX(),
       y: revealedCardTargetY(),
       rotation: 0,
@@ -830,7 +919,7 @@ function orbitIdlePosition(entry) {
     };
   }
 
-  if (deckInteraction.selectedCard && ["selected", "revealing"].includes(deckInteraction.phase)) {
+  if (deckInteraction.selectedCard && ["selected", "flipping"].includes(deckInteraction.phase)) {
     return {
       x: entry.frozenX,
       y: entry.frozenY + orbitPushDownOffset(),
@@ -839,6 +928,10 @@ function orbitIdlePosition(entry) {
       opacity: entry.frozenOpacity,
       zIndex: entry.frozenZIndex
     };
+  }
+
+  if (deckInteraction.selectedCard && ["revealing", "revealed", "dispersing"].includes(deckInteraction.phase)) {
+    return revealedDeckPosition(entry);
   }
 
   return {
@@ -1035,28 +1128,34 @@ async function revealSelectedCard() {
 
   const selectedEntry = deckInteraction.selectedCard;
   selectionControls.classList.add("hidden");
-  revealSelectionButton.disabled = true;
   cancelSelectionButton.disabled = true;
-  deckInteraction.phase = "revealing";
+  deckInteraction.phase = "flipping";
   deckOracle.classList.add("is-loading");
   prepareOrbitCardArtwork(selectedEntry);
+  assignRevealedStackOrder(selectedEntry);
+  cacheRevealedLayout(selectedEntry);
+  deckInteraction.cards.forEach((entry) => {
+    if (entry !== selectedEntry) {
+      entry.element.classList.remove("is-muted");
+    }
+  });
   selectedEntry.element.classList.add("is-flipped", "is-revealed");
   await wait(220);
   const outcome = await resolveSelectedReading(selectedEntry);
+  deckInteraction.phase = "revealing";
   createOrbitCardAnimation(
     selectedEntry,
-    {
-      x: revealedCardTargetX(),
-      y: revealedCardTargetY(),
-      rotation: 0,
-      scale: ORBIT_SELECTED_SCALE,
-      opacity: 1,
-      zIndex: 10000
-    },
+    selectedEntry.revealedLayout,
     ORBIT_SELECTION_DURATION,
     easeOutQuint
   );
-  animateOrbitSpreadOffset(0, ORBIT_SELECTION_DURATION, easeOutQuint);
+  deckInteraction.cards.forEach((entry) => {
+    if (entry === selectedEntry) {
+      return;
+    }
+
+    createOrbitCardAnimation(entry, entry.revealedLayout, ORBIT_SELECTION_DURATION, easeOutQuint);
+  });
   await wait(ORBIT_SELECTION_DURATION + 80);
   deckOracle.classList.remove("is-loading");
 
@@ -1073,7 +1172,7 @@ async function revealSelectedCard() {
   renderHistory(outcome.history || []);
   const revealedCard = lookupCard(outcome.reading.cardKey);
   if (revealedCard) {
-    updateRevealPanel(revealedCard);
+    updateRevealPanel(revealedCard, { animate: true });
   }
 }
 
@@ -1257,16 +1356,23 @@ function attachFallback(imageNode) {
 attachFallback(cardArtwork);
 attachFallback(heroCardArtwork);
 
-function updateRevealPanel(card) {
+function updateRevealPanel(card, { animate = true } = {}) {
   revealHeadline.textContent = localizedCardName(card);
   revealTags.innerHTML = localizedKeywords(card)
     .slice(0, 4)
     .map((keyword) => `<span class="reveal-tag">#${keyword.replace(/\s+/g, "")}</span>`)
     .join("");
+
+  if (animate) {
+    animateStageEntrance(revealPanel);
+    return;
+  }
+
   revealPanel.classList.remove("hidden");
+  revealPanel.classList.remove("is-entering", "is-transitioning-out");
 }
 
-function renderReading(reading) {
+function renderReading(reading, { animateIn = false, animateRevealPanel = true } = {}) {
   const card = lookupCard(reading.cardKey);
   if (!card) {
     return;
@@ -1282,8 +1388,14 @@ function renderReading(reading) {
   deckShell.classList.remove("is-drawing", "is-flipping");
   deckShell.classList.add("is-revealed");
   deckButton.classList.add("hidden");
-  summaryPanel.classList.remove("hidden");
-  readingLayout.classList.remove("hidden");
+  if (animateIn) {
+    animateStageEntrance(summaryPanel, readingLayout);
+  } else {
+    summaryPanel.classList.remove("hidden");
+    readingLayout.classList.remove("hidden");
+    summaryPanel.classList.remove("is-entering", "is-transitioning-out");
+    readingLayout.classList.remove("is-entering", "is-transitioning-out");
+  }
   heroPulledCard.style.transform =
     orientation === "reversed" ? "rotate(180deg) translateY(-26px) scale(1.02)" : "";
   heroCardArtwork.dataset.fallback = fallback;
@@ -1304,7 +1416,7 @@ function renderReading(reading) {
   keywordSupport.textContent = `${t("supportKeywords")}: ${localizedKeywords(card).filter(Boolean).join(", ")}`;
   cardArtworkBackText.textContent = "";
 
-  updateRevealPanel(card);
+  updateRevealPanel(card, { animate: animateRevealPanel });
   shareButton.classList.remove("hidden");
   activeTheme = "general";
   revealText(
@@ -1419,7 +1531,7 @@ function revealAnimation(reading) {
   window.setTimeout(() => {
     deckShell.classList.add("is-revealed");
     deckShell.classList.remove("is-drawing");
-    renderReading(reading);
+    renderReading(reading, { animateIn: true, animateRevealPanel: true });
   }, 1280);
 }
 
@@ -1484,9 +1596,12 @@ function closeHistoryDialog() {
   historyDialog.close();
 }
 
-function continueToReading() {
+async function continueToReading() {
   if (currentReading && summaryPanel.classList.contains("hidden")) {
-    renderReading(currentReading);
+    deckOracle.classList.add("is-transitioning-out");
+    revealPanel.classList.add("is-transitioning-out");
+    await wait(UI_STAGE_TRANSITION_DURATION - 40);
+    renderReading(currentReading, { animateIn: true, animateRevealPanel: false });
   }
   summaryViewport.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1778,7 +1893,6 @@ langEnglish.addEventListener("click", () => setLanguage("en"));
 langVietnamese.addEventListener("click", () => setLanguage("vi"));
 deckButton.addEventListener("click", handleDraw);
 deckShell.addEventListener("click", handleDraw);
-revealSelectionButton.addEventListener("click", revealSelectedCard);
 cancelSelectionButton.addEventListener("click", cancelSelectedCardSelection);
 continueButton.addEventListener("click", continueToReading);
 shareButton.addEventListener("click", handleDownloadCard);
