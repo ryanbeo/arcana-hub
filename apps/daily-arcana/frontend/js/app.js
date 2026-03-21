@@ -444,10 +444,6 @@ async function requestDraw({ redraw = false, userContext = "", selectedCardKey =
   });
 }
 
-function readingContent(reading, language = currentLanguage) {
-  return reading?.interpretation?.[language] || reading?.interpretation?.en || null;
-}
-
 function closeLimitDialog() {
   if (limitDialog.open) {
     limitDialog.close();
@@ -1176,18 +1172,6 @@ async function revealSelectedCard() {
   }
 }
 
-function joinKeywords(keywords) {
-  if (keywords.length === 1) {
-    return keywords[0];
-  }
-
-  if (keywords.length === 2) {
-    return `${keywords[0]} and ${keywords[1]}`;
-  }
-
-  return `${keywords.slice(0, -1).join(", ")}, and ${keywords[keywords.length - 1]}`;
-}
-
 function buildThemeSummary(card, orientation, themeName, reading = currentReading) {
   const exactThemeCopy = localizedThemeCopy(card, orientation, themeName);
   return exactThemeCopy || "";
@@ -1209,23 +1193,15 @@ function trimSentence(text, maxLength) {
 
 function buildExportCopy(card, orientation, reading = currentReading) {
   const orientationLabel = orientation === "reversed" ? t("orientationReversed") : t("orientationUpright");
-  const cardName = localizedCardName(card);
   const primaryKeyword = localizedPrimaryKeyword(card);
   const keywords = localizedKeywords(card).filter(Boolean);
   const readingDate = formatToday();
-  const intro =
-    currentLanguage === "vi"
-      ? trimSentence(`${cardName} đưa ${primaryKeyword.toLowerCase()} vào trọng tâm thông qua ${(keywords[0] || primaryKeyword).toLowerCase()} và ${(keywords[1] || primaryKeyword).toLowerCase()}.`, 120)
-      : trimSentence(
-          `${cardName} brings ${primaryKeyword.toLowerCase()} into focus through ${(keywords[0] || primaryKeyword).toLowerCase()} and ${(keywords[1] || primaryKeyword).toLowerCase()}.`,
-          110
-        );
   return {
     orientationLabel,
     readingDate,
-    intro,
+    intro: trimSentence(localizedSummary(card, orientation), 120),
     keywordLabel: primaryKeyword,
-    keywordSupport: trimSentence(`${t("supportKeywords")}: ${keywords.join(", ")}.`, 120),
+    keywordSupport: trimSentence(localizedArtwork(card) || `${t("supportKeywords")}: ${keywords.join(", ")}`, 160),
     general: trimSentence(buildThemeSummary(card, orientation, "general", reading), 118),
     work: trimSentence(buildThemeSummary(card, orientation, "work", reading), 118),
     relationship: trimSentence(buildThemeSummary(card, orientation, "relationship", reading), 118),
