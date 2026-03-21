@@ -651,6 +651,28 @@ body.is-scrolled .language-link {
   object-fit: cover;
 }
 
+.is-mobile-safari .orbit-card-back,
+.is-mobile-safari .orbit-card-front {
+  transform: none;
+  transition: opacity 320ms ease;
+}
+
+.is-mobile-safari .orbit-card-back {
+  opacity: 1;
+}
+
+.is-mobile-safari .orbit-card-front {
+  opacity: 0;
+}
+
+.is-mobile-safari .orbit-card.is-flipped .orbit-card-back {
+  opacity: 0;
+}
+
+.is-mobile-safari .orbit-card.is-flipped .orbit-card-front {
+  opacity: 1;
+}
+
 .orbit-card.is-selected .orbit-card-face,
 .orbit-card.is-revealed .orbit-card-face {
   border-color: rgba(255, 223, 126, 0.92);
@@ -710,7 +732,7 @@ body.is-scrolled .language-link {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
-  transform: translate(-50%, calc(-50% - 292px));
+  transform: translate(-50%, calc(-50% - var(--selection-control-offset, 292px)));
 }
 
 .is-mobile-safari .selection-guidance {
@@ -722,7 +744,14 @@ body.is-scrolled .language-link {
   height: 3.5rem;
   padding: 0;
   border-radius: 999px;
-  transform: translate(-50%, calc(-50% + 292px));
+  background: rgba(22, 17, 32, 0.42);
+  border: 1px solid rgba(255, 236, 204, 0.14);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translate(-50%, calc(-50% + var(--selection-control-offset, 292px)));
 }
 
 .selection-cancel .button-icon {
@@ -1409,6 +1438,10 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .selection-controls {
+    --selection-control-offset: 172px;
+  }
+
   .draw-viewport {
     padding:
       calc(var(--safe-top) + 5.2rem)
@@ -1501,12 +1534,10 @@ h3 {
 
   .selection-guidance {
     font-size: 0.72rem;
-    padding: 0.55rem 0.8rem;
-    transform: translate(-50%, calc(-50% - 214px));
-  }
-
-  .selection-cancel {
-    transform: translate(-50%, calc(-50% + 214px));
+    padding: 0.55rem 0.9rem;
+    max-width: min(calc(100vw - 2.5rem), 320px);
+    white-space: normal;
+    text-align: center;
   }
 
   .deck-shell {
@@ -1538,7 +1569,7 @@ h3 {
 
   .deck-shell.is-flipping .deck-card-front,
   .deck-shell.is-revealed .deck-card-front {
-    transform: translateY(-56px) scale(1.03) rotateY(0deg);
+    transform: translateY(-48px) scale(1.03) rotateY(0deg);
   }
 
   .keyword-row {

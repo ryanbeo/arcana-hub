@@ -171,12 +171,12 @@ const ORBIT_VISIBLE_ARC = 1.16;
 const ORBIT_PUSH_DOWN_RATIO = 0.3;
 const REVEALED_STACK_VISIBLE_COUNT = 3;
 const ORBIT_RENDER_COUNT_DESKTOP = 24;
-const ORBIT_RENDER_COUNT_MOBILE = 18;
-const ORBIT_RENDER_COUNT_MOBILE_SAFARI = 14;
+const ORBIT_RENDER_COUNT_MOBILE = 22;
+const ORBIT_RENDER_COUNT_MOBILE_SAFARI = 18;
 const REVEALED_STACK_PATTERN = [
-  { x: -22, y: 18, rotation: -7 },
-  { x: 22, y: 18, rotation: 7 },
-  { x: 0, y: 10, rotation: -1 }
+  { x: -16, y: 14, rotation: -5 },
+  { x: 16, y: 14, rotation: 5 },
+  { x: 0, y: 8, rotation: -1 }
 ];
 
 let activeTheme = "general";
@@ -339,7 +339,7 @@ function loadLanguage() {
     return stored;
   }
 
-  return navigator.language && navigator.language.toLowerCase().startsWith("vi") ? "vi" : "en";
+  return "vi";
 }
 
 function loadClientId() {
@@ -653,7 +653,7 @@ function revealedCardTargetX() {
 }
 
 function revealedCardTargetY() {
-  return -(deckInteraction.metrics.height || 0) * 0.14;
+  return -(deckInteraction.metrics.height || 0) * (window.innerWidth < 760 ? 0.08 : 0.14);
 }
 
 function animateStageEntrance(...elements) {
@@ -677,7 +677,7 @@ function revealedStackScaleUnit() {
 
 function revealedStackBaseY() {
   const shellWidth = deckShell.getBoundingClientRect().width || 300;
-  return revealedCardTargetY() + shellWidth * (window.innerWidth < 760 ? 0.18 : 0.22);
+  return revealedCardTargetY() + shellWidth * (window.innerWidth < 760 ? 0.12 : 0.22);
 }
 
 function revealedDeckPosition(entry) {
