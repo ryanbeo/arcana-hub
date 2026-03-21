@@ -1336,7 +1336,7 @@ function renderLanguage() {
   dateHeading.textContent = formatToday();
 
   if (currentReading) {
-    renderReading(currentReading);
+    renderReading(currentReading, { animateRevealPanel: revealPanel && !revealPanel.classList.contains("hidden") });
   } else {
     setThemeTab(activeTheme);
   }
@@ -1482,7 +1482,7 @@ async function syncUi() {
     shareButton.classList.toggle("hidden", !todayReading);
 
     if (todayReading) {
-      renderReading(todayReading);
+      renderReading(todayReading, { animateRevealPanel: false });
       deckButton.classList.add("hidden");
     }
 
@@ -1497,7 +1497,7 @@ async function syncUi() {
     shareButton.classList.toggle("hidden", !saved.reading);
 
     if (saved.reading) {
-      renderReading(saved.reading);
+      renderReading(saved.reading, { animateRevealPanel: false });
       deckButton.classList.add("hidden");
     }
 
@@ -1515,7 +1515,7 @@ async function syncUi() {
   shareButton.classList.toggle("hidden", !todayReading);
 
   if (todayReading) {
-    renderReading(todayReading);
+    renderReading(todayReading, { animateRevealPanel: false });
     deckButton.classList.add("hidden");
   }
 
@@ -1560,7 +1560,7 @@ async function handleDraw() {
   const existing = state.current && state.current.date === dateKey ? state.current : null;
 
   if (existing) {
-    renderReading(existing);
+    renderReading(existing, { animateRevealPanel: false });
     return;
   }
 
