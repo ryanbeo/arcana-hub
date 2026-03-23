@@ -3,6 +3,7 @@ const LANGUAGE_STORAGE_KEY = "arcana-daily-language";
 const CLIENT_ID_STORAGE_KEY = "arcana-daily-client-id";
 const API_BASE_URL = (window.ARCANA_API_BASE_URL || "https://arcana-hub.onrender.com").replace(/\/$/, "");
 const FRONTEND_ONLY_MODE = window.ARCANA_FRONTEND_ONLY !== false;
+const REVERSED_ORIENTATION_RATE = 0.3;
 const USER_AGENT = navigator.userAgent || "";
 const IS_MOBILE_SAFARI =
   /AppleWebKit/i.test(USER_AGENT) &&
@@ -389,7 +390,7 @@ function randomDraw() {
   const cardIndex = Math.floor(Math.random() * deck.length);
   return {
     cardKey: deck[cardIndex].key,
-    orientation: Math.random() < 0.5 ? "upright" : "reversed"
+    orientation: Math.random() < REVERSED_ORIENTATION_RATE ? "reversed" : "upright"
   };
 }
 
@@ -791,7 +792,7 @@ function buildOrbitCardEntry(card, ringIndex, slotIndex, count) {
     element,
     frontImage: element.querySelector("img"),
     card,
-    orientation: Math.random() < 0.5 ? "upright" : "reversed",
+    orientation: Math.random() < REVERSED_ORIENTATION_RATE ? "reversed" : "upright",
     ringIndex,
     slotIndex,
     baseAngle: (Math.PI * 2 * slotIndex) / count,

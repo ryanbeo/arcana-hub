@@ -26,6 +26,7 @@ CSV_SOURCE_PATH = DATA_DIR / "tarot-card-content-filled.csv"
 ALLOWED_ORIGIN = (os.environ.get("ALLOWED_ORIGIN") or "*").rstrip("/")
 DEFAULT_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 CLIENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{8,80}$")
+REVERSED_ORIENTATION_RATE = min(max(float(os.environ.get("ARCANA_REVERSED_RATE", "0.3")), 0.0), 1.0)
 DEFAULT_INTERPRETATION = {
     "en": {
         "keywords": {"main": "", "supporting": ["", "", "", ""]},
@@ -738,10 +739,18 @@ def hash_seed(value):
     return int(hashlib.sha256(value.encode("utf-8")).hexdigest(), 16)
 
 
+def is_reversed_seed(seed):
+    return (seed % 1000) < int(REVERSED_ORIENTATION_RATE * 1000)
+
+
+def random_orientation():
+    return "reversed" if secrets.randbelow(1000) < int(REVERSED_ORIENTATION_RATE * 1000) else "upright"
+
+
 def pick_daily_reading(user_id, draw_date):
     seed = hash_seed(f"{user_id}:{draw_date}")
     card = DECK[seed % len(DECK)]
-    orientation = "reversed" if (seed // len(DECK)) % 2 else "upright"
+    orientation = "reversed" if is_reversed_seed(seed // len(DECK)) else "upright"
     return card["key"], orientation
 
 
@@ -754,11 +763,11 @@ def resolve_requested_draw(user_id, draw_date, redraw=False, selected_card_key="
             raise ValueError("Unknown selected_card_key")
         if orientation and orientation not in {"upright", "reversed"}:
             raise ValueError("Unknown selected_orientation")
-        return card_key, (orientation or ("reversed" if secrets.randbelow(2) else "upright"))
+        return card_key, (orientation or random_orientation())
 
     if redraw:
         seed = secrets.randbelow(len(DECK))
-        return DECK[seed]["key"], ("reversed" if secrets.randbelow(2) else "upright")
+        return DECK[seed]["key"], random_orientation()
 
     return pick_daily_reading(user_id, draw_date)
 
