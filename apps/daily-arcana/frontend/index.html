@@ -55,43 +55,39 @@
 
       <section class="draw-viewport" id="drawViewport">
         <div class="draw-stage">
-          <button class="deck-shell" id="deckShell" type="button" aria-live="polite" aria-label="Draw a tarot card">
-            <span class="deck-stack">
-              <span class="deck-card deck-card-back deck-card-one"></span>
-              <span class="deck-card deck-card-back deck-card-two"></span>
-              <span class="deck-card deck-card-back deck-card-three"></span>
-              <span class="deck-card deck-card-front" id="heroPulledCard">
-                <img id="heroCardArtwork" alt="" />
+          <div class="draw-stage-art" id="drawStageArt">
+            <button class="deck-shell" id="deckShell" type="button" aria-live="polite" aria-label="Draw a tarot card">
+              <span class="deck-stack">
+                <span class="deck-card deck-card-back deck-card-one"></span>
+                <span class="deck-card deck-card-back deck-card-two"></span>
+                <span class="deck-card deck-card-back deck-card-three"></span>
+                <span class="deck-card deck-card-front" id="heroPulledCard">
+                  <img id="heroCardArtwork" alt="" />
+                </span>
               </span>
-            </span>
-            <span class="deck-glow"></span>
-          </button>
+              <span class="deck-glow"></span>
+            </button>
 
-          <div class="deck-oracle hidden" id="deckOracle" aria-live="polite">
-            <div class="deck-orbit-field" id="deckOrbitField"></div>
-            <div class="selection-controls hidden" id="selectionControls">
-              <button class="ghost-button secondary-button selection-cancel" id="cancelSelectionButton" type="button" aria-label="Return card to orbit">
-                <span class="button-icon" aria-hidden="true"><i class="ph ph-x"></i></span>
-              </button>
+            <div class="deck-oracle hidden" id="deckOracle" aria-live="polite">
+              <div class="deck-orbit-field" id="deckOrbitField"></div>
+              <div class="selection-controls hidden" id="selectionControls">
+                <button class="ghost-button secondary-button selection-cancel" id="cancelSelectionButton" type="button" aria-label="Return card to orbit">
+                  <span class="button-icon" aria-hidden="true"><i class="ph ph-x"></i></span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <button class="draw-cta icon-support" id="deckButton" type="button">
-            <span class="button-icon" aria-hidden="true"><i class="ph ph-cards"></i></span>
-            <span class="button-label" data-i18n="drawButton">Draw your card</span>
-          </button>
+            <button class="draw-cta icon-support" id="deckButton" type="button">
+              <span class="button-icon" aria-hidden="true"><i class="ph ph-cards"></i></span>
+              <span class="button-label" data-i18n="drawButton">Draw your card</span>
+            </button>
+          </div>
 
           <div class="reveal-panel hidden" id="revealPanel">
             <p class="eyebrow" id="dailyRevealEyebrow" data-i18n="dailyReveal">Daily reveal</p>
             <p class="reveal-kicker" id="revealKicker" data-i18n="revealKicker">Your card today is</p>
             <h1 id="revealHeadline"></h1>
             <div class="reveal-tags" id="revealTags"></div>
-            <div class="reveal-actions">
-              <button class="ghost-button reveal-button icon-support" id="continueButton" type="button">
-                <span class="button-icon" aria-hidden="true"><i class="ph ph-shooting-star"></i></span>
-                <span class="button-label" data-i18n="continueButton">Read my reading</span>
-              </button>
-            </div>
           </div>
         </div>
       </section>

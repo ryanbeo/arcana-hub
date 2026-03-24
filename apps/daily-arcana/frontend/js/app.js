@@ -15,6 +15,7 @@ const langEnglish = document.getElementById("langEnglish");
 const langVietnamese = document.getElementById("langVietnamese");
 const languageSwitcher = document.getElementById("languageSwitcher");
 const drawStage = document.querySelector(".draw-stage");
+const drawStageArt = document.getElementById("drawStageArt");
 const deckButton = document.getElementById("deckButton");
 const deckShell = document.getElementById("deckShell");
 const deckOracle = document.getElementById("deckOracle");
@@ -27,7 +28,6 @@ const heroCardArtwork = document.getElementById("heroCardArtwork");
 const revealPanel = document.getElementById("revealPanel");
 const revealHeadline = document.getElementById("revealHeadline");
 const revealTags = document.getElementById("revealTags");
-const continueButton = document.getElementById("continueButton");
 const summaryViewport = document.getElementById("summaryViewport");
 const summaryPanel = document.getElementById("summaryPanel");
 const shareButton = document.getElementById("shareButton");
@@ -79,6 +79,8 @@ const historyDialogHeading = document.getElementById("historyDialogHeading");
 const historyDialogEmptyState = document.getElementById("historyDialogEmptyState");
 const previewEyebrow = document.getElementById("previewEyebrow");
 const exportHeading = document.getElementById("exportHeading");
+const brandMark = document.querySelector(".brand-mark");
+const utilityLinks = document.querySelector(".utility-links");
 
 const THEME_ICON_CLASS = {
   general: "ph ph-sun-dim",
@@ -197,6 +199,41 @@ document.documentElement.classList.toggle("is-mobile-safari", IS_MOBILE_SAFARI);
 function setReadingScrollLocked(locked) {
   document.documentElement.classList.toggle("is-reading-locked", locked);
   document.body.classList.toggle("is-reading-locked", locked);
+}
+
+function setRevealStageActive(active) {
+  drawStage?.classList.toggle("is-reveal-active", active);
+  updateRevealLayoutMetrics();
+}
+
+function updateRevealLayoutMetrics() {
+  if (!drawStage || !drawStageArt) {
+    return;
+  }
+
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const rootStyles = window.getComputedStyle(document.documentElement);
+  const navBottom = Math.max(
+    brandMark?.getBoundingClientRect().bottom || 0,
+    utilityLinks?.getBoundingClientRect().bottom || 0
+  );
+  const safeBottom = Number.parseFloat(rootStyles.getPropertyValue("--safe-bottom") || "0") || 0;
+  const bottomReserve = Number.parseFloat(rootStyles.getPropertyValue("--reveal-bottom-reserve") || "0") || 0;
+  const stageGap = Number.parseFloat(window.getComputedStyle(drawStage).rowGap || "0") || 0;
+  const panelHeight = revealPanel?.getBoundingClientRect().height || 0;
+  const stageHeight = Math.max(0, viewportHeight - navBottom - safeBottom - 16);
+  const artHeight = Math.max(0, stageHeight - panelHeight - stageGap - bottomReserve - 24);
+  const safeWidth = Math.max(0, viewportWidth - 32);
+  const relativeViewportWidth = viewportWidth < 760 ? viewportWidth * 0.62 : viewportWidth * 0.25;
+  const activeCardWidth = clampValue(Math.min(artHeight * 0.625, safeWidth * 0.46, relativeViewportWidth), 180, 340);
+
+  drawStage.style.setProperty("--reveal-nav-clearance", `${Math.max(navBottom, 0)}px`);
+  drawStage.style.setProperty("--reveal-stage-height", `${stageHeight}px`);
+  drawStage.style.setProperty("--reveal-panel-height", `${panelHeight}px`);
+  drawStage.style.setProperty("--reveal-stage-gap", `${stageGap}px`);
+  drawStage.style.setProperty("--reveal-art-height", `${artHeight}px`);
+  drawStage.style.setProperty("--active-card-width", `${activeCardWidth}px`);
 }
 
 function t(key) {
@@ -1019,6 +1056,7 @@ function runDeckInteractionFrame(timestamp) {
 
 function beginDeckSelection() {
   resetDeckInteractionState();
+  setRevealStageActive(false);
   setDeckShellHidden(true);
   deckButton.classList.add("hidden");
   revealPanel.classList.add("hidden");
@@ -1204,10 +1242,7 @@ async function revealSelectedCard() {
   currentReading = outcome.reading;
   deckInteraction.phase = "revealed";
   renderHistory(outcome.history || []);
-  const revealedCard = lookupCard(outcome.reading.cardKey);
-  if (revealedCard) {
-    updateRevealPanel(revealedCard, { animate: true });
-  }
+  renderReading(outcome.reading, { animateIn: true, animateRevealPanel: false });
 }
 
 function buildThemeSummary(card, orientation, themeName, reading = currentReading) {
@@ -1370,8 +1405,10 @@ function attachFallback(imageNode) {
 attachFallback(cardArtwork);
 attachFallback(heroCardArtwork);
 
-function updateRevealPanel(card, { animate = true, lockScroll = true } = {}) {
+function updateRevealPanel(card, { animate = true, lockScroll = false } = {}) {
   setReadingScrollLocked(lockScroll);
+  setRevealStageActive(true);
+  dailyRevealEyebrow.textContent = "";
   revealHeadline.textContent = localizedCardName(card);
   revealTags.innerHTML = localizedKeywords(card)
     .slice(0, 4)
@@ -1380,11 +1417,15 @@ function updateRevealPanel(card, { animate = true, lockScroll = true } = {}) {
 
   if (animate) {
     animateStageEntrance(revealPanel);
+    window.requestAnimationFrame(() => {
+      updateRevealLayoutMetrics();
+    });
     return;
   }
 
   revealPanel.classList.remove("hidden");
   revealPanel.classList.remove("is-entering", "is-transitioning-out");
+  updateRevealLayoutMetrics();
 }
 
 function renderReading(reading, { animateIn = false, animateRevealPanel = true } = {}) {
@@ -1432,7 +1473,7 @@ function renderReading(reading, { animateIn = false, animateRevealPanel = true }
   keywordSupport.textContent = `${t("supportKeywords")}: ${localizedKeywords(card).filter(Boolean).join(", ")}`;
   cardArtworkBackText.textContent = "";
 
-  updateRevealPanel(card, { animate: animateRevealPanel, lockScroll: animateRevealPanel });
+  updateRevealPanel(card, { animate: animateRevealPanel, lockScroll: false });
   shareButton.classList.remove("hidden");
   activeTheme = "general";
   revealText(
@@ -1547,7 +1588,7 @@ function revealAnimation(reading) {
   window.setTimeout(() => {
     deckShell.classList.add("is-revealed");
     deckShell.classList.remove("is-drawing");
-    renderReading(reading, { animateIn: true, animateRevealPanel: true });
+    renderReading(reading, { animateIn: true, animateRevealPanel: false });
   }, 1280);
 }
 
@@ -1570,6 +1611,7 @@ async function handleDraw() {
 
 function resetDeckState() {
   setReadingScrollLocked(false);
+  setRevealStageActive(false);
   resetDeckInteractionState();
   setDeckShellHidden(false);
   revealPanel.classList.add("hidden");
@@ -1612,16 +1654,6 @@ function openHistoryDialog() {
 
 function closeHistoryDialog() {
   historyDialog.close();
-}
-
-async function continueToReading() {
-  if (currentReading && summaryPanel.classList.contains("hidden")) {
-    deckOracle.classList.add("is-transitioning-out");
-    revealPanel.classList.add("is-transitioning-out");
-    await wait(UI_STAGE_TRANSITION_DURATION - 40);
-    renderReading(currentReading, { animateIn: true, animateRevealPanel: false });
-  }
-  summaryViewport.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function toggleCardFlip() {
@@ -1912,7 +1944,6 @@ langVietnamese.addEventListener("click", () => setLanguage("vi"));
 deckButton.addEventListener("click", handleDraw);
 deckShell.addEventListener("click", handleDraw);
 cancelSelectionButton.addEventListener("click", cancelSelectedCardSelection);
-continueButton.addEventListener("click", continueToReading);
 shareButton.addEventListener("click", handleDownloadCard);
 cardFlipButton.addEventListener("click", toggleCardFlip);
 tarotCard.addEventListener("click", toggleCardFlip);
@@ -1946,8 +1977,19 @@ window.addEventListener("resize", () => {
   if (deckInteraction.phase !== "idle") {
     updateDeckInteractionMetrics();
   }
+  updateRevealLayoutMetrics();
 });
 updateHeaderScrollState();
+
+if (typeof ResizeObserver !== "undefined") {
+  const revealLayoutObserver = new ResizeObserver(() => {
+    updateRevealLayoutMetrics();
+  });
+
+  [revealPanel, brandMark, utilityLinks].filter(Boolean).forEach((node) => {
+    revealLayoutObserver.observe(node);
+  });
+}
 
 async function initializeApp() {
   if ("serviceWorker" in navigator) {

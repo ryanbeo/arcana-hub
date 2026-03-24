@@ -13,6 +13,14 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+  --revealed-card-width: 300px;
+  --active-card-width: 300px;
+  --reveal-nav-clearance: 96px;
+  --reveal-panel-height: 280px;
+  --reveal-stage-height: 680px;
+  --reveal-stage-gap: 24px;
+  --reveal-art-height: 320px;
+  --reveal-bottom-reserve: 16px;
 }
 
 * {
@@ -56,7 +64,8 @@ button {
 .app-shell {
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .brand-mark {
@@ -368,12 +377,30 @@ body.is-scrolled .language-link {
   display: grid;
   width: min(1200px, 100%);
   min-height: clamp(620px, 86vh, 920px);
-  align-content: center;
-  justify-items: center;
-  gap: 2.6rem;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  justify-items: stretch;
+  gap: clamp(1.4rem, 3vh, 2.6rem);
   padding: clamp(4rem, 10vh, 6.5rem) 0 4rem;
   transform: translate3d(calc(var(--parallax-x) * 0.04), calc(var(--parallax-y) * 0.04), 0);
   transition: transform 180ms ease-out;
+}
+
+.draw-stage-art {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2.6rem;
+}
+
+.draw-stage.is-reveal-active .draw-stage-art {
+  min-height: 0;
+  height: var(--reveal-art-height);
+  align-content: center;
+  padding-bottom: 0;
+  overflow: visible;
 }
 
 .draw-cta,
@@ -399,14 +426,16 @@ body.is-scrolled .language-link {
 }
 
 .draw-cta.hidden {
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
 
 .deck-shell {
+  --deck-shell-width: min(300px, 70vw);
+  --deck-front-lift: calc(var(--deck-shell-width) * -0.2867);
+  --deck-front-scale: 1.08;
   position: relative;
   z-index: 2;
-  width: min(300px, 70vw);
+  width: var(--deck-shell-width);
   aspect-ratio: 5 / 8;
   overflow: visible;
   padding: 0;
@@ -418,7 +447,11 @@ body.is-scrolled .language-link {
     rotateX(calc(var(--parallax-y) * -0.05deg))
     rotateY(calc(var(--parallax-x) * 0.07deg));
   transform-style: preserve-3d;
-  transition: transform 180ms ease-out, opacity 240ms ease, filter 240ms ease;
+  transition:
+    width 420ms cubic-bezier(0.2, 0.72, 0, 1),
+    transform 180ms ease-out,
+    opacity 240ms ease,
+    filter 240ms ease;
 }
 
 .deck-shell.is-hidden {
@@ -505,7 +538,7 @@ body.is-scrolled .language-link {
 .deck-shell.is-flipping .deck-card-front,
 .deck-shell.is-revealed .deck-card-front {
   opacity: 1;
-  transform: translateY(-86px) scale(1.08) rotateY(0deg);
+  transform: translateY(var(--deck-front-lift)) scale(var(--deck-front-scale)) rotateY(0deg);
   box-shadow: 0 34px 90px rgba(0, 0, 0, 0.42);
 }
 
@@ -748,6 +781,7 @@ body.is-scrolled .language-link {
 }
 
 .reveal-panel {
+  --reveal-panel-shift-x: 0px;
   position: relative;
   z-index: 4;
   display: grid;
@@ -755,15 +789,37 @@ body.is-scrolled .language-link {
   gap: 0.72rem;
   text-align: center;
   width: min(100vw - 2rem, 1100px);
-  margin-top: clamp(10rem, 18vh, 13rem);
-  padding-top: 0;
+  margin-top: 0;
+  padding: 0 0 calc(var(--safe-bottom) + 0.35rem);
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateX(var(--reveal-panel-shift-x)) translateY(0) scale(1);
   filter: blur(0);
   transition:
     opacity 320ms ease,
     transform 420ms cubic-bezier(0.2, 0.72, 0, 1),
     filter 320ms ease;
+}
+
+.reveal-panel .eyebrow {
+  display: none;
+}
+
+.draw-stage.is-reveal-active .reveal-panel {
+  --reveal-panel-shift-x: 0px;
+  position: relative;
+  left: auto;
+  bottom: auto;
+  z-index: 6;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: end;
+  width: min(
+    calc(100vw - var(--safe-left) - var(--safe-right) - 2rem),
+    1100px
+  );
+  max-height: none;
+  overflow: visible;
+  padding: 0;
 }
 
 .reveal-panel h1 {
@@ -838,6 +894,20 @@ body.is-scrolled .language-link {
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.8rem;
+}
+
+.draw-stage.is-reveal-active .reveal-actions {
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.5rem;
+  padding-bottom: 0.1rem;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(15, 11, 23, 0), rgba(15, 11, 23, 0.96) 42%);
+}
+
+.draw-stage.is-reveal-active .reveal-button {
+  width: min(100%, 36rem);
+  justify-content: center;
 }
 
 .summary-viewport,
@@ -989,7 +1059,7 @@ h3 {
 .deck-oracle.is-transitioning-out,
 .reveal-panel.is-transitioning-out {
   opacity: 0;
-  transform: translateY(-22px) scale(0.97);
+  transform: translateX(var(--reveal-panel-shift-x, 0px)) translateY(-22px) scale(0.97);
   filter: blur(10px);
 }
 
@@ -998,7 +1068,7 @@ h3 {
 .summary-panel.is-entering,
 .reading-layout.is-entering {
   opacity: 0;
-  transform: translateY(28px) scale(0.98);
+  transform: translateX(var(--reveal-panel-shift-x, 0px)) translateY(28px) scale(0.98);
   filter: blur(14px);
 }
 
@@ -1036,11 +1106,13 @@ h3 {
   padding: 0;
   border: 0;
   background: transparent;
-  width: 260px;
+  width: min(100%, var(--active-card-width));
   aspect-ratio: 5 / 8;
   perspective: 1200px;
   cursor: pointer;
-  transition: transform 260ms ease;
+  transition:
+    width 420ms cubic-bezier(0.2, 0.72, 0, 1),
+    transform 260ms ease;
 }
 
 .tarot-card-inner {
@@ -1408,6 +1480,23 @@ h3 {
   text-decoration: underline;
 }
 
+.draw-stage.is-reveal-active {
+  height: var(--reveal-stage-height);
+  min-height: var(--reveal-stage-height);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: clamp(0.75rem, 2vh, 1.5rem);
+  padding:
+    calc(var(--reveal-nav-clearance) + 0.75rem)
+    0
+    calc(var(--safe-bottom) + 0.75rem)
+    0;
+}
+
+.draw-stage.is-reveal-active .deck-shell {
+  --deck-shell-width: var(--active-card-width);
+}
+
 @media (max-width: 1020px) {
   .reading-layout {
     grid-template-columns: 1fr;
@@ -1438,8 +1527,12 @@ h3 {
 
   .draw-stage {
     min-height: min(720px, calc(100svh - var(--safe-top) - var(--safe-bottom) - 7rem));
-    gap: 1.5rem;
+    gap: 1.25rem;
     padding: 2rem 0 calc(var(--safe-bottom) + 1.5rem);
+  }
+
+  .draw-stage-art {
+    gap: 1.5rem;
   }
 
   .utility-links {
@@ -1520,7 +1613,13 @@ h3 {
   }
 
   .deck-shell {
-    width: 200px;
+    --deck-shell-width: 200px;
+    --deck-front-scale: 1.03;
+  }
+
+  .draw-stage.is-reveal-active .deck-shell {
+    --deck-shell-width: var(--active-card-width);
+    --deck-front-scale: 1.05;
   }
 
   .orbit-card {
@@ -1538,12 +1637,11 @@ h3 {
 
   .reveal-panel {
     gap: 0.55rem;
-    margin-top: clamp(3.75rem, 7vh, 5.75rem);
     padding-top: 0;
   }
 
   .reveal-panel h1 {
-    font-size: clamp(2.25rem, 10vw, 3.6rem);
+    font-size: clamp(2rem, 8.8vw, 3.25rem);
   }
 
   .reveal-kicker {
@@ -1561,13 +1659,12 @@ h3 {
   }
 
   .tarot-card {
-    width: 100%;
-    max-width: 360px;
+    width: min(100%, var(--active-card-width));
   }
 
   .deck-shell.is-flipping .deck-card-front,
   .deck-shell.is-revealed .deck-card-front {
-    transform: translateY(-48px) scale(1.03) rotateY(0deg);
+    transform: translateY(var(--deck-front-lift)) scale(var(--deck-front-scale)) rotateY(0deg);
   }
 
   .keyword-row {
@@ -1598,6 +1695,12 @@ h3 {
 
   .summary-panel .reading-summary {
     font-size: clamp(1.4rem, 6vw, 2.2rem);
+  }
+
+  :root {
+    --revealed-card-width: min(78vw, clamp(220px, 42svh, 360px));
+    --reveal-stage-gap: 20px;
+    --reveal-bottom-reserve: 12px;
   }
 
   .theme-tabs {
