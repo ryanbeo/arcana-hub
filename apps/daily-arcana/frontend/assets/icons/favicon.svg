@@ -1,19 +1,67 @@
-<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="200" height="200" fill="url(#bg)" />
-  <path
-    d="M100 46L115.58 84.42L154 100L115.58 115.58L100 154L84.42 115.58L46 100L84.42 84.42L100 46Z"
-    stroke="#101010"
-    stroke-width="10"
-    stroke-linejoin="round"
-  />
-  <path d="M140 42V66" stroke="#101010" stroke-width="10" stroke-linecap="round" />
-  <path d="M128 54H152" stroke="#101010" stroke-width="10" stroke-linecap="round" />
-  <path d="M166 66V82" stroke="#101010" stroke-width="10" stroke-linecap="round" />
-  <path d="M158 74H174" stroke="#101010" stroke-width="10" stroke-linecap="round" />
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" fill="#050505" />
+  <g filter="url(#glow)">
+    <path
+      d="M282 370C406 266 510 204 605 155C750 200 835 244 904 296C855 344 824 370 798 401"
+      stroke="url(#gold)"
+      stroke-width="78"
+      stroke-linecap="square"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M298 405C420 332 481 290 571 220"
+      stroke="url(#gold)"
+      stroke-width="74"
+      stroke-linecap="square"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M392 490C345 603 374 812 271 958"
+      stroke="url(#gold)"
+      stroke-width="92"
+      stroke-linecap="square"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M615 243C559 300 532 370 526 497"
+      stroke="url(#gold)"
+      stroke-width="92"
+      stroke-linecap="square"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M535 570H690"
+      stroke="url(#gold)"
+      stroke-width="82"
+      stroke-linecap="square"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M715 285L712 695L846 811"
+      stroke="url(#gold)"
+      stroke-width="92"
+      stroke-linecap="square"
+      stroke-linejoin="round"
+    />
+  </g>
   <defs>
-    <linearGradient id="bg" x1="100" y1="0" x2="100" y2="200" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FAE5B2" />
-      <stop offset="1" stop-color="#F7D58C" />
+    <linearGradient id="gold" x1="271" y1="155" x2="846" y2="958" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF3B0" />
+      <stop offset="0.35" stop-color="#F4D88B" />
+      <stop offset="0.7" stop-color="#DDBB75" />
+      <stop offset="1" stop-color="#FFF0B8" />
     </linearGradient>
+    <filter id="glow" x="177" y="61" width="761" height="989" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+      <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+      <feGaussianBlur stdDeviation="20" result="blurred" />
+      <feColorMatrix
+        in="blurred"
+        type="matrix"
+        values="1 0 0 0 0.15 0 1 0 0 0.12 0 0 1 0 0 0 0 0 1 0"
+        result="tinted"
+      />
+      <feBlend in="SourceGraphic" in2="tinted" mode="screen" />
+    </filter>
   </defs>
 </svg>
